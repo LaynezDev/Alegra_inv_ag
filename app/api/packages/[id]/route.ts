@@ -1,0 +1,60 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+export async function GET(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const id = parseInt(params.id);
+    if (isNaN(id)) {
+      return NextResponse.json({ error: "ID inválido" }, { status: 400 });
+    }
+
+    const pkg = await prisma.package.findUnique({
+      where: { id },
+      include: {
+        products: {
+          orderBy: { createdAt: "desc" },
+          include: {
+            orderItems: {
+              include: {
+                order: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!pkg) {
+      return NextResponse.json({ error: "Paquete no encontrado" }, { status: 404 });
+    }
+
+    let totalSold = 0;
+    pkg.products.forEach((p) => {
+      p.orderItems.forEach((item) => {
+        if (["pagado", "enviado", "entregado"].includes(item.order.status)) {
+          totalSold += Number(item.finalPrice);
+        }
+      });
+    });
+
+    const cost = Number(pkg.costPrice);
+    const isRecovered = totalSold >= cost && cost > 0;
+    const profit = Math.max(0, totalSold - cost);
+    const recoveryPercent = cost > 0 ? Math.min(100, Math.round((totalSold / cost) * 100)) : 100;
+
+    return NextResponse.json({
+      ...pkg,
+      costPrice: cost,
+      totalWeight: pkg.totalWeight ? Number(pkg.totalWeight) : null,
+      totalSold,
+      isRecovered,
+      profit,
+      recoveryPercent,
+    });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
