@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { adminStorage } from "@/lib/firebase-admin";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
+import crypto from "crypto";
 
 export async function POST(req: Request) {
   try {
@@ -16,29 +18,84 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No se enviaron archivos" }, { status: 400 });
     }
 
-    const uploadDir = path.join(process.cwd(), "public", "uploads", "products");
-    await mkdir(uploadDir, { recursive: true });
-
     const uploadedUrls: string[] = [];
 
-    for (const file of files) {
-      if (!file || typeof file === "string" || !file.name) continue;
-      const bytes = await file.arrayBuffer();
-      const buffer = Buffer.from(bytes);
+    // Verificar si Firebase Storage está configurado con credenciales
+    const bucketName =
+      process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+    const hasFirebaseCredentials = Boolean(
+      process.env.FIREBASE_SERVICE_ACCOUNT_KEY ||
+      (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) ||
+      process.env.GOOGLE_APPLICATION_CREDENTIALS
+    );
 
-      const ext = path.extname(file.name) || ".jpg";
-      const cleanExt = ext.toLowerCase().replace(/[^a-z0-9.]/g, "") || ".jpg";
-      const filename = `prod_${Date.now()}_${Math.random().toString(36).substring(2, 8)}${cleanExt}`;
+    const useFirebase = Boolean(
+      bucketName &&
+      hasFirebaseCredentials &&
+      adminStorage &&
+      typeof adminStorage.bucket === "function"
+    );
 
-      const filePath = path.join(uploadDir, filename);
-      await writeFile(filePath, buffer);
+    if (useFirebase) {
+      // --- SUBIDA A FIREBASE STORAGE ---
+      const bucket = adminStorage.bucket();
 
-      uploadedUrls.push(`/uploads/products/${filename}`);
+      for (const file of files) {
+        if (!file || typeof file === "string" || !file.name) continue;
+        const bytes = await file.arrayBuffer();
+        const buffer = Buffer.from(bytes);
+
+        const ext = path.extname(file.name) || ".jpg";
+        const cleanExt = ext.toLowerCase().replace(/[^a-z0-9.]/g, "") || ".jpg";
+        const filename = `prod_${Date.now()}_${Math.random().toString(36).substring(2, 8)}${cleanExt}`;
+        const destination = `products/${filename}`;
+        const fileRef = bucket.file(destination);
+
+        const token = crypto.randomUUID();
+
+        await fileRef.save(buffer, {
+          metadata: {
+            contentType: file.type || "image/jpeg",
+            metadata: {
+              firebaseStorageDownloadTokens: token,
+            },
+          },
+        });
+
+        // URL pública accesible globalmente con token de descarga de Firebase
+        const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(
+          destination
+        )}?alt=media&token=${token}`;
+
+        uploadedUrls.push(publicUrl);
+      }
+    } else {
+      // --- FALLBACK A DISCO LOCAL (si aún no se han configurado las claves de Firebase) ---
+      const uploadDir = path.join(process.cwd(), "public", "uploads", "products");
+      await mkdir(uploadDir, { recursive: true });
+
+      for (const file of files) {
+        if (!file || typeof file === "string" || !file.name) continue;
+        const bytes = await file.arrayBuffer();
+        const buffer = Buffer.from(bytes);
+
+        const ext = path.extname(file.name) || ".jpg";
+        const cleanExt = ext.toLowerCase().replace(/[^a-z0-9.]/g, "") || ".jpg";
+        const filename = `prod_${Date.now()}_${Math.random().toString(36).substring(2, 8)}${cleanExt}`;
+
+        const filePath = path.join(uploadDir, filename);
+        await writeFile(filePath, buffer);
+
+        uploadedUrls.push(`/uploads/products/${filename}`);
+      }
     }
 
-    return NextResponse.json({ urls: uploadedUrls });
+    return NextResponse.json({
+      urls: uploadedUrls,
+      storageType: useFirebase ? "firebase" : "local",
+    });
   } catch (error: any) {
-    console.error("Error al procesar subida de imágenes:", error);
+    console.error("Error al procesar subida de imágenes a Firebase Storage:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "migrate:images": "tsx scripts/migrate-images-to-firebase.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",
