@@ -1,0 +1,29 @@
+# Configuración de Firebase App Hosting para Alegra Web (Next.js 14)
+# Documentación: https://firebase.google.com/docs/app-hosting/configure
+
+runConfig:
+  cpu: 1
+  memoryMiB: 1024
+  minInstances: 0
+  maxInstances: 2
+  concurrency: 80
+
+env:
+  - variable: DATABASE_PROVIDER
+    value: "firestore"
+  - variable: FIREBASE_PROJECT_ID
+    value: "alegragt-66b94"
+  - variable: FIREBASE_STORAGE_BUCKET
+    value: "alegragt-66b94.firebasestorage.app"
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: "AIzaSyDQW7wsAN3mcgkfjNujmTKaGvEExnhOeyA"
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: "alegragt-66b94.firebaseapp.com"
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: "alegragt-66b94"
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: "alegragt-66b94.firebasestorage.app"
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "42473123156"
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: "1:42473123156:web:ecabbb477c20b5dcb8acc1"
