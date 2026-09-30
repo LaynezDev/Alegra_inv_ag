@@ -1,11 +1,20 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getFirestorePackageById } from "@/lib/firestore-service";
 
 export async function GET(
   req: Request,
   { params }: { params: { id: string } }
 ) {
   try {
+    if (process.env.DATABASE_PROVIDER === "firestore") {
+      const pkg = await getFirestorePackageById(params.id);
+      if (!pkg) {
+        return NextResponse.json({ error: "Paquete no encontrado" }, { status: 404 });
+      }
+      return NextResponse.json(pkg);
+    }
+
     const id = parseInt(params.id);
     if (isNaN(id)) {
       return NextResponse.json({ error: "ID inválido" }, { status: 400 });

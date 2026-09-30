@@ -1,21 +1,30 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { addFirestoreOrderItem } from "@/lib/firestore-service";
 
 export async function POST(
   req: Request,
   { params }: { params: { id: string } }
 ) {
   try {
-    const orderId = parseInt(params.id);
-    if (isNaN(orderId)) {
-      return NextResponse.json({ error: "ID inválido" }, { status: 400 });
-    }
-
     const body = await req.json();
     const { productId, discountAmount = 0 } = body;
 
     if (!productId) {
       return NextResponse.json({ error: "ID del producto requerido" }, { status: 400 });
+    }
+
+    if (process.env.DATABASE_PROVIDER === "firestore") {
+      const item = await addFirestoreOrderItem(params.id, {
+        productId: String(productId),
+        discountAmount: Number(discountAmount),
+      });
+      return NextResponse.json(item, { status: 201 });
+    }
+
+    const orderId = parseInt(params.id);
+    if (isNaN(orderId)) {
+      return NextResponse.json({ error: "ID inválido" }, { status: 400 });
     }
 
     const result = await prisma.$transaction(async (tx) => {
@@ -68,8 +77,6 @@ export async function POST(
       const newTotalDiscount = Number(order.totalDiscount) + disc;
       const newTotalAmount = Number(order.totalAmount) + finalP;
 
-      // Si la orden ya estaba pagada, el nuevo producto queda apartado hasta que se cubra el saldo pendiente
-      // O si se requiere pago adicional, la orden puede mantenerse en 'pagado' con saldo por cobrar o 'pendiente_pago'
       await tx.order.update({
         where: { id: orderId },
         data: {
@@ -82,7 +89,7 @@ export async function POST(
       // Marcar producto como 'apartado'
       await tx.product.update({
         where: { id: product.id },
-        data: { status: order.status === "pagado" ? "apartado" : "apartado" },
+        data: { status: "apartado" },
       });
 
       return orderItem;

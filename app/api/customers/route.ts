@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getFirestoreCustomers, createFirestoreCustomer } from "@/lib/firestore-service";
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const q = searchParams.get("q")?.trim() || "";
+
+    if (process.env.DATABASE_PROVIDER === "firestore") {
+      const customers = await getFirestoreCustomers(q);
+      return NextResponse.json(customers);
+    }
 
     const whereClause: any = {};
     if (q) {
@@ -53,11 +59,25 @@ export async function POST(req: Request) {
       municipalityId,
     } = body;
 
-    if (!fullName || !phonePrimary || !fullAddress || !departmentId || !municipalityId) {
+    if (!fullName || !phonePrimary || !fullAddress) {
       return NextResponse.json(
         {
           error:
-            "Nombre completo, teléfono principal, dirección, departamento y municipio son obligatorios",
+            "Nombre completo, teléfono principal y dirección son obligatorios",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (process.env.DATABASE_PROVIDER === "firestore") {
+      const customer = await createFirestoreCustomer(body);
+      return NextResponse.json(customer, { status: 201 });
+    }
+
+    if (!departmentId || !municipalityId) {
+      return NextResponse.json(
+        {
+          error: "Departamento y municipio son obligatorios",
         },
         { status: 400 }
       );

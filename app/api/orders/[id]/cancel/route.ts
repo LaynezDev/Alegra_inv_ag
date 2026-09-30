@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { cancelFirestoreOrder } from "@/lib/firestore-service";
 
 export async function POST(
   req: Request,
   { params }: { params: { id: string } }
 ) {
   try {
+    if (process.env.DATABASE_PROVIDER === "firestore") {
+      const cancelled = await cancelFirestoreOrder(params.id);
+      return NextResponse.json(cancelled);
+    }
+
     const orderId = parseInt(params.id);
     if (isNaN(orderId)) {
       return NextResponse.json({ error: "ID inválido" }, { status: 400 });

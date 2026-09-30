@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { calculateCostByWeight } from "@/lib/utils";
+import { updateFirestoreProduct } from "@/lib/firestore-service";
 
 export async function GET(
   req: Request,
@@ -34,6 +35,29 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    const body = await req.json();
+    const { name, weight, salePrice, photos, barcode, status } = body;
+
+    if (!name || salePrice === undefined) {
+      return NextResponse.json(
+        { error: "Nombre y precio de venta son obligatorios" },
+        { status: 400 }
+      );
+    }
+
+    if (process.env.DATABASE_PROVIDER === "firestore") {
+      const photosArray = photos ? (Array.isArray(photos) ? photos : [photos]) : [];
+      const updated = await updateFirestoreProduct(params.id, {
+        name,
+        weight: weight ? parseFloat(weight) : null,
+        salePrice: parseFloat(salePrice),
+        photos: photosArray,
+        barcode,
+        status,
+      });
+      return NextResponse.json(updated);
+    }
+
     const id = parseInt(params.id);
     if (isNaN(id)) {
       return NextResponse.json({ error: "ID inválido" }, { status: 400 });
@@ -46,16 +70,6 @@ export async function PUT(
 
     if (!existingProduct) {
       return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
-    }
-
-    const body = await req.json();
-    const { name, weight, salePrice, photos, barcode, status } = body;
-
-    if (!name || salePrice === undefined) {
-      return NextResponse.json(
-        { error: "Nombre y precio de venta son obligatorios" },
-        { status: 400 }
-      );
     }
 
     // Validar código de barras único si cambió

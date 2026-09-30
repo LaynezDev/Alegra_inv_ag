@@ -1,12 +1,35 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { calculateCostByWeight } from "@/lib/utils";
+import { createFirestoreProduct } from "@/lib/firestore-service";
 
 export async function POST(
   req: Request,
   { params }: { params: { id: string } }
 ) {
   try {
+    const body = await req.json();
+    const { name, weight, salePrice, photos, customBarcode } = body;
+
+    if (!name || salePrice === undefined) {
+      return NextResponse.json(
+        { error: "El nombre y el precio de venta son obligatorios" },
+        { status: 400 }
+      );
+    }
+
+    if (process.env.DATABASE_PROVIDER === "firestore") {
+      const photosArray = photos ? (Array.isArray(photos) ? photos : [photos]) : [];
+      const newProduct = await createFirestoreProduct(params.id, {
+        name,
+        weight: weight ? parseFloat(weight) : null,
+        salePrice: parseFloat(salePrice),
+        photos: photosArray,
+        customBarcode,
+      });
+      return NextResponse.json(newProduct, { status: 201 });
+    }
+
     const packageId = parseInt(params.id);
     if (isNaN(packageId)) {
       return NextResponse.json({ error: "ID de paquete inválido" }, { status: 400 });
@@ -19,16 +42,6 @@ export async function POST(
 
     if (!pkg) {
       return NextResponse.json({ error: "Paquete no encontrado" }, { status: 404 });
-    }
-
-    const body = await req.json();
-    const { name, weight, salePrice, photos, customBarcode } = body;
-
-    if (!name || salePrice === undefined) {
-      return NextResponse.json(
-        { error: "El nombre y el precio de venta son obligatorios" },
-        { status: 400 }
-      );
     }
 
     // Calcular costo aproximado por peso si ambos pesos existen

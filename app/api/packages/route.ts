@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getFirestorePackages, createFirestorePackage } from "@/lib/firestore-service";
 
 export async function GET() {
   try {
+    if (process.env.DATABASE_PROVIDER === "firestore") {
+      const packages = await getFirestorePackages();
+      return NextResponse.json(packages);
+    }
+
     const packages = await prisma.package.findMany({
       include: {
         products: {
@@ -83,6 +89,11 @@ export async function POST(req: Request) {
         { error: "Tipo de paquete, costo y número de factura son obligatorios" },
         { status: 400 }
       );
+    }
+
+    if (process.env.DATABASE_PROVIDER === "firestore") {
+      const newPackage = await createFirestorePackage(body);
+      return NextResponse.json(newPackage, { status: 201 });
     }
 
     const count = await prisma.package.count();

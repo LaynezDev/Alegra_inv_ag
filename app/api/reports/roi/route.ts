@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getFirestoreRoiReport } from "@/lib/firestore-service";
 
 export async function GET() {
   try {
+    if (process.env.DATABASE_PROVIDER === "firestore") {
+      const report = await getFirestoreRoiReport();
+      return NextResponse.json(report);
+    }
+
     const packages = await prisma.package.findMany({
       include: {
         products: {

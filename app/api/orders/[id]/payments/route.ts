@@ -1,16 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { addFirestoreOrderPayment } from "@/lib/firestore-service";
 
 export async function POST(
   req: Request,
   { params }: { params: { id: string } }
 ) {
   try {
-    const orderId = parseInt(params.id);
-    if (isNaN(orderId)) {
-      return NextResponse.json({ error: "ID inválido" }, { status: 400 });
-    }
-
     const body = await req.json();
     const { referenceNumber, paymentMethod, amount, notes, markAsPaid } = body;
 
@@ -19,6 +15,22 @@ export async function POST(
         { error: "Número de referencia y monto válido son requeridos" },
         { status: 400 }
       );
+    }
+
+    if (process.env.DATABASE_PROVIDER === "firestore") {
+      const payment = await addFirestoreOrderPayment(params.id, {
+        referenceNumber,
+        paymentMethod,
+        amount: Number(amount),
+        notes,
+        markAsPaid: markAsPaid ?? true,
+      });
+      return NextResponse.json(payment, { status: 201 });
+    }
+
+    const orderId = parseInt(params.id);
+    if (isNaN(orderId)) {
+      return NextResponse.json({ error: "ID inválido" }, { status: 400 });
     }
 
     const result = await prisma.$transaction(async (tx) => {

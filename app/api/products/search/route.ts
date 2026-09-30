@@ -1,11 +1,20 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { searchFirestoreProducts } from "@/lib/firestore-service";
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const query = searchParams.get("q")?.trim() || "";
     const barcode = searchParams.get("barcode")?.trim();
+
+    if (process.env.DATABASE_PROVIDER === "firestore") {
+      const results = await searchFirestoreProducts(query, barcode);
+      if (barcode && results.length === 0) {
+        return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
+      }
+      return NextResponse.json(barcode ? results[0] : results);
+    }
 
     if (barcode) {
       const product = await prisma.product.findUnique({

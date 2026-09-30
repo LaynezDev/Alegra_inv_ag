@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getFirestoreOrders, createFirestoreOrder } from "@/lib/firestore-service";
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const status = searchParams.get("status");
+    const status = searchParams.get("status") || undefined;
+
+    if (process.env.DATABASE_PROVIDER === "firestore") {
+      const orders = await getFirestoreOrders(status);
+      return NextResponse.json(orders);
+    }
 
     const whereClause: any = {};
     if (status && status !== "todos") {
@@ -64,6 +70,15 @@ export async function POST(req: Request) {
         { error: "Se requiere un cliente y al menos un producto para crear la comanda" },
         { status: 400 }
       );
+    }
+
+    if (process.env.DATABASE_PROVIDER === "firestore") {
+      const order = await createFirestoreOrder({
+        customerId: String(customerId),
+        items,
+        notes,
+      });
+      return NextResponse.json(order, { status: 201 });
     }
 
     const result = await prisma.$transaction(async (tx) => {
