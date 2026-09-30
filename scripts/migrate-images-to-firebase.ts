@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { adminStorage } from "../lib/firebase-admin";
 import { prisma } from "../lib/prisma";
 import { readFile, readdir } from "fs/promises";

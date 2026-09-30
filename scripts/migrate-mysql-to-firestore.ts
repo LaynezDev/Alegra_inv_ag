@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { adminDb } from "../lib/firebase-admin";
 import { prisma } from "../lib/prisma";
 import { Timestamp } from "firebase-admin/firestore";
