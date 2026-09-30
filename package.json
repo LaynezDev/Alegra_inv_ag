@@ -9,7 +9,8 @@
     "lint": "next lint",
     "postinstall": "prisma generate",
     "migrate:images": "tsx scripts/migrate-images-to-firebase.ts",
-    "migrate:firestore": "tsx scripts/migrate-mysql-to-firestore.ts"
+    "migrate:firestore": "tsx scripts/migrate-mysql-to-firestore.ts",
+    "test:firestore": "tsx scripts/test-firestore.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",

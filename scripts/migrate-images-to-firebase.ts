@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { adminStorage } from "../lib/firebase-admin";
+import { adminStorage, adminDb } from "../lib/firebase-admin";
 import { prisma } from "../lib/prisma";
 import { readFile, readdir } from "fs/promises";
 import path from "path";
@@ -98,6 +98,15 @@ async function main() {
           photos: JSON.stringify(updatedPhotos),
         },
       });
+      if (adminDb) {
+        try {
+          await adminDb.collection("products").doc(`prod_${prod.id}`).update({
+            photos: updatedPhotos,
+          });
+        } catch (e: any) {
+          console.warn(`Aviso: No se pudo actualizar en Firestore para prod_${prod.id}:`, e.message);
+        }
+      }
       console.log(`✓ Producto ${prod.name} (${prod.barcode}) actualizado con URLs de Firebase.`);
     }
   }
