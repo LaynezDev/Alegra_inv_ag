@@ -1,8 +1,12 @@
 import "dotenv/config";
-import { initializeApp, getApps, getApp, cert, App } from "firebase-admin/app";
-import { getFirestore, Firestore } from "firebase-admin/firestore";
-import { getStorage, Storage } from "firebase-admin/storage";
-import { getAuth, Auth } from "firebase-admin/auth";
+import { initializeApp, getApps, getApp, cert } from "firebase-admin/app";
+import type { App } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+import type { Firestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
+import type { Storage } from "firebase-admin/storage";
+import { getAuth } from "firebase-admin/auth";
+import type { Auth } from "firebase-admin/auth";
 
 function getServiceAccount() {
   // Opción 1: Archivo JSON completo como string
@@ -69,8 +73,9 @@ try {
   adminDb.settings({ ignoreUndefinedProperties: true });
   adminStorage = getStorage(adminApp);
   adminAuth = getAuth(adminApp);
-} catch (error) {
+} catch (error: any) {
   // Manejo seguro en tiempo de build estático
+  console.warn("Aviso: Firebase Admin no inicializado en este contexto:", error?.message || error);
   adminApp = {} as App;
   adminDb = {} as Firestore;
   adminStorage = {} as Storage;

@@ -20,25 +20,22 @@ export async function POST(req: Request) {
 
     const uploadedUrls: string[] = [];
 
-    // Verificar si Firebase Storage está configurado con credenciales
+    // Bucket de Firebase Storage
     const bucketName =
-      process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
-    const hasFirebaseCredentials = Boolean(
-      process.env.FIREBASE_SERVICE_ACCOUNT_KEY ||
-      (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) ||
-      process.env.GOOGLE_APPLICATION_CREDENTIALS
-    );
+      process.env.FIREBASE_STORAGE_BUCKET ||
+      process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ||
+      "alegragt-66b94.firebasestorage.app";
 
+    // En Firebase App Hosting (Cloud Run) o en local con Firestore, usamos Firebase Storage
     const useFirebase = Boolean(
-      bucketName &&
-      hasFirebaseCredentials &&
       adminStorage &&
-      typeof adminStorage.bucket === "function"
+      typeof adminStorage.bucket === "function" &&
+      process.env.DATABASE_PROVIDER !== "mysql"
     );
 
     if (useFirebase) {
       // --- SUBIDA A FIREBASE STORAGE ---
-      const bucket = adminStorage.bucket();
+      const bucket = adminStorage.bucket(bucketName);
 
       for (const file of files) {
         if (!file || typeof file === "string" || !file.name) continue;
