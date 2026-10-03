@@ -15,18 +15,18 @@ import {
 import BarcodeDisplay from "@/components/BarcodeDisplay";
 
 interface Municipality {
-  id: number;
+  id: number | string;
   name: string;
 }
 
 interface Department {
-  id: number;
+  id: number | string;
   name: string;
   municipalities: Municipality[];
 }
 
 interface Customer {
-  id: number;
+  id: number | string;
   barcode: string;
   fullName: string;
   tiktokUsername: string | null;
@@ -36,8 +36,8 @@ interface Customer {
   phoneSecondary: string | null;
   fullAddress: string;
   addressReference: string | null;
-  department: { id: number; name: string };
-  municipality: { id: number; name: string };
+  department: { id?: number | string; name: string };
+  municipality: { id?: number | string; name: string };
   _count?: { orders: number };
 }
 
@@ -57,8 +57,8 @@ export default function CustomersPage() {
   const [phoneSecondary, setPhoneSecondary] = useState("");
   const [fullAddress, setFullAddress] = useState("");
   const [addressReference, setAddressReference] = useState("");
-  const [departmentId, setDepartmentId] = useState<number | "">("");
-  const [municipalityId, setMunicipalityId] = useState<number | "">("");
+  const [departmentId, setDepartmentId] = useState<string>("");
+  const [municipalityId, setMunicipalityId] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -99,8 +99,11 @@ export default function CustomersPage() {
     fetchCustomers(searchQuery);
   };
 
-  const selectedDepartment = departments.find((d) => d.id === Number(departmentId));
+  const selectedDepartment = departments.find((d) => String(d.id) === String(departmentId));
   const availableMunicipalities = selectedDepartment ? selectedDepartment.municipalities : [];
+  const selectedMunicipality = availableMunicipalities.find(
+    (m) => String(m.id) === String(municipalityId) || m.name === String(municipalityId)
+  );
 
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,6 +125,8 @@ export default function CustomersPage() {
           addressReference,
           departmentId,
           municipalityId,
+          departmentName: selectedDepartment?.name || "Guatemala",
+          municipalityName: selectedMunicipality?.name || (availableMunicipalities[0]?.name || "Guatemala"),
         }),
       });
 
@@ -441,14 +446,14 @@ export default function CustomersPage() {
                     required
                     value={departmentId}
                     onChange={(e) => {
-                      setDepartmentId(Number(e.target.value));
+                      setDepartmentId(e.target.value);
                       setMunicipalityId("");
                     }}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:border-alegra-navy bg-white"
                   >
                     <option value="">Selecciona departamento...</option>
                     {departments.map((d) => (
-                      <option key={d.id} value={d.id}>
+                      <option key={d.id} value={String(d.id)}>
                         {d.name}
                       </option>
                     ))}
@@ -463,12 +468,12 @@ export default function CustomersPage() {
                     required
                     disabled={!departmentId}
                     value={municipalityId}
-                    onChange={(e) => setMunicipalityId(Number(e.target.value))}
+                    onChange={(e) => setMunicipalityId(e.target.value)}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:border-alegra-navy bg-white disabled:bg-gray-100"
                   >
                     <option value="">Selecciona municipio...</option>
                     {availableMunicipalities.map((m) => (
-                      <option key={m.id} value={m.id}>
+                      <option key={m.id} value={String(m.id)}>
                         {m.name}
                       </option>
                     ))}

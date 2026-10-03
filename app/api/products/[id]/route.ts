@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { calculateCostByWeight } from "@/lib/utils";
-import { updateFirestoreProduct } from "@/lib/firestore-service";
+import { updateFirestoreProduct, deleteFirestoreProduct } from "@/lib/firestore-service";
 
 export async function GET(
   req: Request,
@@ -123,6 +123,44 @@ export async function PUT(
     });
 
     return NextResponse.json(updatedProduct);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    if (process.env.DATABASE_PROVIDER === "firestore") {
+      const result = await deleteFirestoreProduct(params.id);
+      return NextResponse.json(result);
+    }
+
+    const id = parseInt(params.id);
+    if (isNaN(id)) {
+      return NextResponse.json({ error: "ID inválido" }, { status: 400 });
+    }
+
+    const product = await prisma.product.findUnique({
+      where: { id },
+      include: { orderItems: true },
+    });
+
+    if (!product) {
+      return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
+    }
+
+    if (product.status === "apartado" || product.status === "vendido" || product.orderItems.length > 0) {
+      return NextResponse.json(
+        { error: "No se puede eliminar una prenda que está apartada o vendida en una orden" },
+        { status: 400 }
+      );
+    }
+
+    await prisma.product.delete({ where: { id } });
+    return NextResponse.json({ success: true, message: "Producto eliminado correctamente" });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

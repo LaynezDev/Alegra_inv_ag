@@ -70,7 +70,11 @@ export async function POST(req: Request) {
     }
 
     if (process.env.DATABASE_PROVIDER === "firestore") {
-      const customer = await createFirestoreCustomer(body);
+      const customer = await createFirestoreCustomer({
+        ...body,
+        departmentName: body.departmentName || "Guatemala",
+        municipalityName: body.municipalityName || "Guatemala",
+      });
       return NextResponse.json(customer, { status: 201 });
     }
 
@@ -86,6 +90,9 @@ export async function POST(req: Request) {
     const count = await prisma.customer.count();
     const barcode = `CLI-${String(count + 1).padStart(5, "0")}`;
 
+    const numDeptId = parseInt(String(departmentId).replace("dept_", "")) || 1;
+    const numMuniId = parseInt(String(municipalityId).replace("muni_", "")) || 1;
+
     const customer = await prisma.customer.create({
       data: {
         barcode,
@@ -97,8 +104,8 @@ export async function POST(req: Request) {
         phoneSecondary: phoneSecondary?.trim() || null,
         fullAddress: fullAddress.trim(),
         addressReference: addressReference?.trim() || null,
-        departmentId: parseInt(departmentId),
-        municipalityId: parseInt(municipalityId),
+        departmentId: numDeptId,
+        municipalityId: numMuniId,
       },
       include: {
         department: true,

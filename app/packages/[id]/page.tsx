@@ -27,7 +27,7 @@ import BarcodeDisplay from "@/components/BarcodeDisplay";
 import { formatCurrency, formatWeight, calculateCostByWeight } from "@/lib/utils";
 
 interface Product {
-  id: number;
+  id: number | string;
   barcode: string;
   name: string;
   weight: number | null;
@@ -39,7 +39,7 @@ interface Product {
 }
 
 interface PackageDetail {
-  id: number;
+  id: number | string;
   code: string;
   packageType: string;
   costPrice: number;
@@ -86,6 +86,10 @@ export default function PackageDetailPage() {
   const [submittingEdit, setSubmittingEdit] = useState(false);
   const [editErrorMsg, setEditErrorMsg] = useState("");
   const editFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Visibilidad de prendas: ocultar vendidas por defecto
+  const [showSold, setShowSold] = useState(false);
+  const [deletingProductId, setDeletingProductId] = useState<number | string | null>(null);
 
   // Estado Lightbox / Visualizador de Imágenes en Grande
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -299,6 +303,36 @@ export default function PackageDetailPage() {
     setLightboxImages(list);
     setActiveImageIndex(initialIndex);
     setLightboxOpen(true);
+  };
+
+  // Eliminar Prenda
+  const handleDeleteProduct = async (prod: Product | null) => {
+    if (!prod) return;
+    if (prod.status === "apartado" || prod.status === "vendido") {
+      alert(`No se puede eliminar la prenda "${prod.name}" porque ya fue ${prod.status === "vendido" ? "vendida" : "apartada"} en una orden.`);
+      return;
+    }
+
+    if (!confirm(`¿Estás seguro de que deseas eliminar la prenda "${prod.name}" (${prod.barcode})? Esta acción es irreversible.`)) {
+      return;
+    }
+
+    try {
+      setDeletingProductId(prod.id);
+      const res = await fetch(`/api/products/${prod.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Error al eliminar la prenda");
+      }
+      if (editingProduct && editingProduct.id === prod.id) {
+        setEditingProduct(null);
+      }
+      fetchPackage();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setDeletingProductId(null);
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -595,137 +629,203 @@ export default function PackageDetailPage() {
       )}
 
       {/* Listado de Productos del Paquete */}
-      <div className="space-y-3">
-        <div className="flex justify-between items-center">
-          <h2 className="text-base font-bold text-alegra-navy flex items-center gap-2">
-            <Tag className="w-4 h-4 text-alegra-sand-dark" />
-            Prendas Desglosadas ({pkg.products.length})
-          </h2>
-        </div>
+      {(() => {
+        const activeProducts = pkg.products.filter((p) => p.status !== "vendido");
+        const soldProducts = pkg.products.filter((p) => p.status === "vendido");
+        const soldCount = soldProducts.length;
+        const displayedProducts = showSold ? pkg.products : activeProducts;
 
-        {pkg.products.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-xl border border-alegra-border p-6">
-            <Tag className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-            <p className="text-sm font-semibold text-gray-700">No se han desglosado prendas aún</p>
-            <p className="text-xs text-gray-400 mt-0.5">
-              Haz clic en "Desglosar Prenda" arriba para registrar la primera prenda de este paquete.
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {pkg.products.map((prod) => {
-              const photoList: string[] = prod.photos ? JSON.parse(prod.photos) : [];
-              const primaryPhoto = photoList.length > 0 ? photoList[0] : null;
+        return (
+          <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+              <h2 className="text-base font-bold text-alegra-navy flex items-center gap-2">
+                <Tag className="w-4 h-4 text-alegra-sand-dark" />
+                Prendas en Stock ({activeProducts.length})
+              </h2>
 
-              return (
-                <div
-                  key={prod.id}
-                  className="bg-white rounded-xl border border-alegra-border p-4 shadow-xs flex flex-col justify-between hover:border-gray-300 transition-all space-y-3"
+              {soldCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowSold(!showSold)}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 transition-colors flex items-center gap-1.5 self-start sm:self-auto shadow-2xs"
                 >
-                  <div className="space-y-3">
-                    {/* Foto, Nombre y Botón de Visualización en Grande */}
-                    <div className="flex gap-3 items-start">
-                      <div
-                        onClick={() => photoList.length > 0 && handleOpenLightbox(prod, 0)}
-                        className={`relative w-20 h-20 rounded-lg bg-gray-100 border border-gray-200 overflow-hidden shrink-0 flex items-center justify-center ${
-                          photoList.length > 0 ? "cursor-pointer group" : ""
-                        }`}
-                        title={photoList.length > 0 ? "Haz clic para ver fotos en grande" : "Sin foto"}
-                      >
-                        {primaryPhoto ? (
-                          <>
-                            <img
-                              src={primaryPhoto}
-                              alt={prod.name}
-                              className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                            />
-                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                              <Eye className="w-5 h-5 text-white" />
-                            </div>
-                            {photoList.length > 1 && (
-                              <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[10px] font-bold px-1 rounded">
-                                +{photoList.length - 1}
-                              </span>
+                  {showSold ? (
+                    <>
+                      <Eye className="w-3.5 h-3.5 text-gray-500" />
+                      <span>Ocultar vendidas ({soldCount})</span>
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="w-3.5 h-3.5 text-alegra-sand-dark" />
+                      <span>Mostrar vendidas ({soldCount})</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+
+            {pkg.products.length === 0 ? (
+              <div className="text-center py-12 bg-white rounded-xl border border-alegra-border p-6">
+                <Tag className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                <p className="text-sm font-semibold text-gray-700">No se han desglosado prendas aún</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Haz clic en "Desglosar Prenda" arriba para registrar la primera prenda de este paquete.
+                </p>
+              </div>
+            ) : displayedProducts.length === 0 ? (
+              <div className="text-center py-12 bg-white rounded-xl border border-alegra-border p-6">
+                <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2" />
+                <p className="text-sm font-semibold text-gray-800">¡Todas las prendas de este lote han sido vendidas!</p>
+                <p className="text-xs text-gray-400 mt-0.5 mb-3">
+                  No hay prendas activas en stock actualmente para este lote.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowSold(true)}
+                  className="text-xs font-semibold text-alegra-navy bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1.5"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  Ver las {soldCount} prendas vendidas
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {displayedProducts.map((prod) => {
+                  const photoList: string[] = prod.photos ? JSON.parse(prod.photos) : [];
+                  const primaryPhoto = photoList.length > 0 ? photoList[0] : null;
+
+                  return (
+                    <div
+                      key={prod.id}
+                      className="bg-white rounded-xl border border-alegra-border p-4 shadow-xs flex flex-col justify-between hover:border-gray-300 transition-all space-y-3"
+                    >
+                      <div className="space-y-3">
+                        {/* Foto, Nombre y Botón de Visualización en Grande */}
+                        <div className="flex gap-3 items-start">
+                          <div
+                            onClick={() => photoList.length > 0 && handleOpenLightbox(prod, 0)}
+                            className={`relative w-20 h-20 rounded-lg bg-gray-100 border border-gray-200 overflow-hidden shrink-0 flex items-center justify-center ${
+                              photoList.length > 0 ? "cursor-pointer group" : ""
+                            }`}
+                            title={photoList.length > 0 ? "Haz clic para ver fotos en grande" : "Sin foto"}
+                          >
+                            {primaryPhoto ? (
+                              <>
+                                <img
+                                  src={primaryPhoto}
+                                  alt={prod.name}
+                                  className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                                />
+                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                  <Eye className="w-5 h-5 text-white" />
+                                </div>
+                                {photoList.length > 1 && (
+                                  <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[10px] font-bold px-1 rounded">
+                                    +{photoList.length - 1}
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              <ImageIcon className="w-7 h-7 text-gray-300" />
                             )}
-                          </>
-                        ) : (
-                          <ImageIcon className="w-7 h-7 text-gray-300" />
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-1 mb-1">
+                              {getStatusBadge(prod.status)}
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => handleOpenEditModal(prod)}
+                                  className="p-1 text-gray-400 hover:text-alegra-navy hover:bg-gray-100 rounded-md transition-colors"
+                                  title="Editar prenda"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteProduct(prod)}
+                                  disabled={deletingProductId === prod.id}
+                                  className="p-1 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors disabled:opacity-50"
+                                  title="Eliminar prenda"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                            <h4 className="text-sm font-semibold text-alegra-navy truncate" title={prod.name}>
+                              {prod.name}
+                            </h4>
+                            <div className="flex items-center gap-2 mt-1 text-xs">
+                              <span className="font-bold text-alegra-navy">
+                                {formatCurrency(prod.salePrice)}
+                              </span>
+                              {prod.weight && (
+                                <span className="text-gray-400">
+                                  • {formatWeight(prod.weight)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Costo Prorrateado */}
+                        {prod.calculatedCost !== null && Number(prod.calculatedCost) > 0 && (
+                          <div className="text-[11px] text-gray-500 bg-alegra-sand-light/50 px-2 py-1 rounded">
+                            Costo base estimado: <b>{formatCurrency(prod.calculatedCost)}</b>
+                          </div>
                         )}
+
+                        {/* Código de Barras con botón de impresión directa */}
+                        <div className="flex justify-center pt-1">
+                          <BarcodeDisplay
+                            value={prod.barcode}
+                            label={prod.name}
+                            showPrintButton={true}
+                            height={36}
+                          />
+                        </div>
                       </div>
 
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-1 mb-1">
-                          {getStatusBadge(prod.status)}
+                      {/* Acciones Rápidas: Ver fotos en grande, Editar y Eliminar */}
+                      <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
+                        {photoList.length > 0 ? (
+                          <button
+                            onClick={() => handleOpenLightbox(prod, 0)}
+                            className="inline-flex items-center gap-1 text-alegra-sand-dark hover:text-alegra-navy font-semibold transition-colors"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Ver fotos en grande ({photoList.length})</span>
+                          </button>
+                        ) : (
+                          <span className="text-gray-400 text-[11px] italic">Sin imágenes</span>
+                        )}
+
+                        <div className="flex items-center gap-3">
                           <button
                             onClick={() => handleOpenEditModal(prod)}
-                            className="p-1 text-gray-400 hover:text-alegra-navy hover:bg-gray-100 rounded-md transition-colors"
-                            title="Editar prenda"
+                            className="inline-flex items-center gap-1 text-gray-600 hover:text-alegra-navy font-medium transition-colors"
                           >
-                            <Edit2 className="w-3.5 h-3.5" />
+                            <Edit2 className="w-3 h-3" />
+                            <span>Editar</span>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteProduct(prod)}
+                            disabled={deletingProductId === prod.id}
+                            className="inline-flex items-center gap-1 text-rose-500 hover:text-rose-700 font-medium transition-colors disabled:opacity-50"
+                            title="Eliminar prenda"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Eliminar</span>
                           </button>
                         </div>
-                        <h4 className="text-sm font-semibold text-alegra-navy truncate" title={prod.name}>
-                          {prod.name}
-                        </h4>
-                        <div className="flex items-center gap-2 mt-1 text-xs">
-                          <span className="font-bold text-alegra-navy">
-                            {formatCurrency(prod.salePrice)}
-                          </span>
-                          {prod.weight && (
-                            <span className="text-gray-400">
-                              • {formatWeight(prod.weight)}
-                            </span>
-                          )}
-                        </div>
                       </div>
                     </div>
-
-                    {/* Costo Prorrateado */}
-                    {prod.calculatedCost !== null && Number(prod.calculatedCost) > 0 && (
-                      <div className="text-[11px] text-gray-500 bg-alegra-sand-light/50 px-2 py-1 rounded">
-                        Costo base estimado: <b>{formatCurrency(prod.calculatedCost)}</b>
-                      </div>
-                    )}
-
-                    {/* Código de Barras con botón de impresión directa */}
-                    <div className="flex justify-center pt-1">
-                      <BarcodeDisplay
-                        value={prod.barcode}
-                        label={prod.name}
-                        showPrintButton={true}
-                        height={36}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Acciones Rápidas: Ver fotos en grande y Editar */}
-                  <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
-                    {photoList.length > 0 ? (
-                      <button
-                        onClick={() => handleOpenLightbox(prod, 0)}
-                        className="inline-flex items-center gap-1 text-alegra-sand-dark hover:text-alegra-navy font-semibold transition-colors"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>Ver fotos en grande ({photoList.length})</span>
-                      </button>
-                    ) : (
-                      <span className="text-gray-400 text-[11px] italic">Sin imágenes</span>
-                    )}
-
-                    <button
-                      onClick={() => handleOpenEditModal(prod)}
-                      className="inline-flex items-center gap-1 text-gray-600 hover:text-alegra-navy font-medium transition-colors"
-                    >
-                      <Edit2 className="w-3 h-3" />
-                      <span>Editar</span>
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        );
+      })()}
 
       {/* Modal Editar Producto */}
       {editingProduct && (
@@ -893,22 +993,38 @@ export default function PackageDetailPage() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
+              <div className="flex justify-between items-center pt-3 border-t border-gray-100">
                 <button
                   type="button"
-                  onClick={() => setEditingProduct(null)}
-                  className="px-4 py-2 text-xs font-medium text-gray-600 hover:text-gray-800"
+                  onClick={() => {
+                    if (editingProduct) {
+                      handleDeleteProduct(editingProduct);
+                    }
+                  }}
+                  disabled={editingProduct?.status === "apartado" || editingProduct?.status === "vendido"}
+                  className="px-3 py-1.5 text-xs font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg border border-red-200 transition-colors flex items-center gap-1.5 disabled:opacity-40 disabled:hover:bg-transparent"
+                  title={editingProduct?.status === "apartado" || editingProduct?.status === "vendido" ? "No se puede eliminar porque está en una orden" : "Eliminar esta prenda"}
                 >
-                  Cancelar
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Eliminar Prenda
                 </button>
-                <button
-                  type="submit"
-                  disabled={submittingEdit}
-                  className="px-5 py-2 text-xs font-semibold bg-alegra-navy text-white rounded-lg hover:bg-alegra-navy-light disabled:opacity-50 transition-colors shadow-xs flex items-center gap-2"
-                >
-                  {submittingEdit && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  {submittingEdit ? "Guardando Cambios..." : "Guardar Cambios"}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingProduct(null)}
+                    className="px-4 py-2 text-xs font-medium text-gray-600 hover:text-gray-800"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingEdit}
+                    className="px-5 py-2 text-xs font-semibold bg-alegra-navy text-white rounded-lg hover:bg-alegra-navy-light disabled:opacity-50 transition-colors shadow-xs flex items-center gap-2"
+                  >
+                    {submittingEdit && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    {submittingEdit ? "Guardando Cambios..." : "Guardar Cambios"}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

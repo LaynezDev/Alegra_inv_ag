@@ -394,6 +394,21 @@ export async function updateFirestoreProduct(id: string, updateData: any): Promi
   return { id: docRef.id, ...updatedSnap.data() };
 }
 
+export async function deleteFirestoreProduct(id: string): Promise<any> {
+  if (!adminDb) throw new Error("Firestore no configurado");
+  const docRef = adminDb.collection("products").doc(id);
+  const doc = await docRef.get();
+  if (!doc.exists) throw new Error("Producto no encontrado");
+
+  const data = doc.data()!;
+  if (data.status === "apartado" || data.status === "vendido") {
+    throw new Error("No se puede eliminar una prenda que está apartada o vendida en una orden");
+  }
+
+  await docRef.delete();
+  return { success: true, message: "Producto eliminado correctamente" };
+}
+
 // -----------------------------------------------------------
 // CLIENTES
 // -----------------------------------------------------------
@@ -760,11 +775,16 @@ export async function updateFirestoreOrderStatus(orderId: string, nextStatus: st
     updatedAt: FieldValue.serverTimestamp(),
   });
 
-  // Si pasa a enviado o entregado, confirmar que los productos estén en vendido
-  if (["enviado", "entregado"].includes(nextStatus)) {
+  // Si pasa a pagado, enviado o entregado, confirmar que los productos estén en vendido
+  if (["pagado", "enviado", "entregado"].includes(nextStatus)) {
     for (const item of order.items || []) {
       const prodRef = adminDb.collection("products").doc(item.productId);
       await prodRef.update({ status: "vendido", updatedAt: FieldValue.serverTimestamp() });
+    }
+  } else if (nextStatus === "cancelado") {
+    for (const item of order.items || []) {
+      const prodRef = adminDb.collection("products").doc(item.productId);
+      await prodRef.update({ status: "disponible", updatedAt: FieldValue.serverTimestamp() });
     }
   }
 
