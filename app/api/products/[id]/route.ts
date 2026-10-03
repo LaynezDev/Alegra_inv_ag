@@ -47,14 +47,16 @@ export async function PUT(
 
     if (process.env.DATABASE_PROVIDER === "firestore") {
       const photosArray = photos ? (Array.isArray(photos) ? photos : [photos]) : [];
-      const updated = await updateFirestoreProduct(params.id, {
+      const updateData: any = {
         name,
         weight: weight ? parseFloat(weight) : null,
         salePrice: parseFloat(salePrice),
         photos: photosArray,
-        barcode,
-        status,
-      });
+      };
+      if (barcode !== undefined) updateData.barcode = barcode;
+      if (status !== undefined) updateData.status = status;
+
+      const updated = await updateFirestoreProduct(params.id, updateData);
       return NextResponse.json(updated);
     }
 

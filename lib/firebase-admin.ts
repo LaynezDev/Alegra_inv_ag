@@ -66,6 +66,7 @@ function initFirebaseAdmin(): App {
 try {
   adminApp = initFirebaseAdmin();
   adminDb = getFirestore(adminApp);
+  adminDb.settings({ ignoreUndefinedProperties: true });
   adminStorage = getStorage(adminApp);
   adminAuth = getAuth(adminApp);
 } catch (error) {

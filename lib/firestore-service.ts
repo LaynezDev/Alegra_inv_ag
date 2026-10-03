@@ -379,10 +379,15 @@ export async function updateFirestoreProduct(id: string, updateData: any): Promi
   }
 
   const payload: any = {
-    ...updateData,
     calculatedCost,
     updatedAt: FieldValue.serverTimestamp(),
   };
+
+  for (const [key, value] of Object.entries(updateData)) {
+    if (value !== undefined) {
+      payload[key] = value;
+    }
+  }
 
   await docRef.update(payload);
   const updatedSnap = await docRef.get();
