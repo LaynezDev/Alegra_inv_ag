@@ -137,11 +137,14 @@ export async function getFirestorePackages(): Promise<any[]> {
     const reservedProducts = pkgProducts.filter((p) => p.status === "apartado").length;
     const availableProducts = pkgProducts.filter((p) => p.status === "disponible").length;
 
-    // Total vendido
+    // Total vendido y Total teórico (suma de precios de todos los productos)
     let totalSold = 0;
+    let totalTheoretical = 0;
     pkgProducts.forEach((p) => {
+      const price = Number(p.salePrice || 0);
+      totalTheoretical += price;
       if (p.status === "vendido") {
-        totalSold += Number(p.salePrice);
+        totalSold += price;
       }
     });
 
@@ -153,6 +156,7 @@ export async function getFirestorePackages(): Promise<any[]> {
     return {
       id: doc.id,
       code: data.code,
+      name: data.name || data.reference || data.title || null,
       packageType: data.packageType,
       costPrice: cost,
       invoiceNumber: data.invoiceNumber,
@@ -165,6 +169,7 @@ export async function getFirestorePackages(): Promise<any[]> {
       reservedProducts,
       availableProducts,
       totalSold,
+      totalTheoretical,
       isRecovered,
       profit,
       recoveryPercent,
@@ -196,9 +201,12 @@ export async function getFirestorePackageById(id: string): Promise<any | null> {
   });
 
   let totalSold = 0;
+  let totalTheoretical = 0;
   products.forEach((p: any) => {
+    const price = Number(p.salePrice || 0);
+    totalTheoretical += price;
     if (p.status === "vendido") {
-      totalSold += Number(p.salePrice);
+      totalSold += price;
     }
   });
 
@@ -210,11 +218,13 @@ export async function getFirestorePackageById(id: string): Promise<any | null> {
   return {
     id: doc.id,
     ...data,
+    name: data.name || data.reference || data.title || null,
     costPrice: cost,
     totalWeight: data.totalWeight ? Number(data.totalWeight) : null,
     createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
     products,
     totalSold,
+    totalTheoretical,
     isRecovered,
     profit,
     recoveryPercent,
@@ -222,6 +232,9 @@ export async function getFirestorePackageById(id: string): Promise<any | null> {
 }
 
 export async function createFirestorePackage(pkgData: {
+  name?: string | null;
+  reference?: string | null;
+  title?: string | null;
   packageType: string;
   costPrice: number;
   invoiceNumber: string;
@@ -233,9 +246,11 @@ export async function createFirestorePackage(pkgData: {
   const countSnap = await adminDb.collection("packages").count().get();
   const count = countSnap.data().count;
   const code = `PKG-${new Date().getFullYear()}-${String(count + 1).padStart(3, "0")}`;
+  const name = (pkgData.name || pkgData.reference || pkgData.title || "").trim();
 
   const docRef = await adminDb.collection("packages").add({
     code,
+    name: name || null,
     packageType: pkgData.packageType,
     costPrice: Number(pkgData.costPrice),
     invoiceNumber: pkgData.invoiceNumber,
@@ -248,6 +263,42 @@ export async function createFirestorePackage(pkgData: {
 
   const created = await docRef.get();
   return { id: docRef.id, ...created.data() };
+}
+
+export async function updateFirestorePackage(
+  id: string,
+  pkgData: {
+    name?: string | null;
+    reference?: string | null;
+    title?: string | null;
+    packageType?: string;
+    costPrice?: number;
+    invoiceNumber?: string;
+    totalWeight?: number | null;
+    notes?: string | null;
+  }
+): Promise<any> {
+  if (!adminDb) throw new Error("Firestore no configurado");
+  const docRef = adminDb.collection("packages").doc(id);
+  const snap = await docRef.get();
+  if (!snap.exists) throw new Error("Paquete no encontrado");
+
+  const updateData: any = {
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  if (pkgData.name !== undefined || pkgData.reference !== undefined || pkgData.title !== undefined) {
+    updateData.name = (pkgData.name || pkgData.reference || pkgData.title || "").trim() || null;
+  }
+  if (pkgData.packageType !== undefined) updateData.packageType = pkgData.packageType;
+  if (pkgData.costPrice !== undefined) updateData.costPrice = Number(pkgData.costPrice);
+  if (pkgData.invoiceNumber !== undefined) updateData.invoiceNumber = pkgData.invoiceNumber;
+  if (pkgData.totalWeight !== undefined) updateData.totalWeight = pkgData.totalWeight ? Number(pkgData.totalWeight) : null;
+  if (pkgData.notes !== undefined) updateData.notes = pkgData.notes || null;
+
+  await docRef.update(updateData);
+  const updated = await docRef.get();
+  return { id: docRef.id, ...updated.data() };
 }
 
 // -----------------------------------------------------------
@@ -924,16 +975,19 @@ export async function getFirestoreRoiReport(): Promise<any> {
     let availableCount = 0;
     let reservedCount = 0;
     let potentialRemainingValue = 0;
+    let totalTheoretical = 0;
 
     pkgProducts.forEach((prod) => {
+      const price = Number(prod.salePrice || 0);
+      totalTheoretical += price;
       if (prod.status === "disponible") {
         availableCount++;
-        potentialRemainingValue += Number(prod.salePrice);
+        potentialRemainingValue += price;
       } else if (prod.status === "apartado") {
         reservedCount++;
       } else if (prod.status === "vendido") {
         soldCount++;
-        packageSoldAmount += Number(prod.salePrice);
+        packageSoldAmount += price;
       }
     });
 
@@ -947,6 +1001,7 @@ export async function getFirestoreRoiReport(): Promise<any> {
     return {
       id: pkg.id,
       code: pkg.code,
+      name: pkg.name || pkg.reference || pkg.title || null,
       packageType: pkg.packageType,
       invoiceNumber: pkg.invoiceNumber,
       costPrice: cost,
@@ -957,6 +1012,7 @@ export async function getFirestoreRoiReport(): Promise<any> {
       availableCount,
       reservedCount,
       packageSoldAmount,
+      totalTheoretical,
       isRecovered,
       recoveryPercentage,
       profit,

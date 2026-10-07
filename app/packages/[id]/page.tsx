@@ -43,6 +43,7 @@ interface Product {
 interface PackageDetail {
   id: number | string;
   code: string;
+  name?: string | null;
   packageType: string;
   costPrice: number;
   invoiceNumber: string;
@@ -51,6 +52,7 @@ interface PackageDetail {
   notes: string | null;
   products: Product[];
   totalSold: number;
+  totalTheoretical?: number;
   isRecovered: boolean;
   profit: number;
   recoveryPercent: number;
@@ -63,6 +65,13 @@ export default function PackageDetailPage() {
   const [pkg, setPkg] = useState<PackageDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
+
+  // Estado para editar información del paquete (referencia, factura, notas)
+  const [editingPackage, setEditingPackage] = useState(false);
+  const [pkgEditName, setPkgEditName] = useState("");
+  const [pkgEditInvoice, setPkgEditInvoice] = useState("");
+  const [pkgEditNotes, setPkgEditNotes] = useState("");
+  const [savingPkgEdit, setSavingPkgEdit] = useState(false);
 
   // Formulario nuevo producto
   const [name, setName] = useState("");
@@ -341,6 +350,42 @@ export default function PackageDetailPage() {
     }
   };
 
+  // Editar Información del Paquete
+  const handleOpenEditPkg = () => {
+    if (!pkg) return;
+    setPkgEditName(pkg.name || "");
+    setPkgEditInvoice(pkg.invoiceNumber || "");
+    setPkgEditNotes(pkg.notes || "");
+    setEditingPackage(true);
+  };
+
+  const handleSavePkgEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pkg) return;
+    try {
+      setSavingPkgEdit(true);
+      const res = await fetch(`/api/packages/${pkg.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: pkgEditName,
+          invoiceNumber: pkgEditInvoice,
+          notes: pkgEditNotes,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Error al actualizar información del paquete");
+      }
+      setEditingPackage(false);
+      fetchPackage();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setSavingPkgEdit(false);
+    }
+  };
+
   // Abrir Modal de Impresión
   const handleOpenPrintAll = () => {
     setPrintSelectedIds([]);
@@ -412,14 +457,35 @@ export default function PackageDetailPage() {
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl sm:text-2xl font-bold font-display text-primary">
                 Paquete {pkg.code}
               </h1>
               <span className="px-2.5 py-0.5 text-xs font-bold rounded-full bg-secondary-fixed text-on-secondary-fixed border border-secondary/20 uppercase">
                 {pkg.packageType}
               </span>
+              <button
+                type="button"
+                onClick={handleOpenEditPkg}
+                className="p-1 text-on-surface-variant hover:text-primary hover:bg-surface-container-low rounded-lg transition-colors cursor-pointer"
+                title="Editar información del paquete (referencia, factura, notas)"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+              </button>
             </div>
+            {pkg.name ? (
+              <h2 className="text-sm sm:text-base font-bold text-secondary mt-0.5">
+                {pkg.name}
+              </h2>
+            ) : (
+              <button
+                type="button"
+                onClick={handleOpenEditPkg}
+                className="text-xs text-on-surface-variant hover:text-secondary underline mt-0.5 cursor-pointer block"
+              >
+                + Agregar referencia o título al paquete
+              </button>
+            )}
             <p className="text-xs text-on-surface-variant flex items-center gap-3 mt-0.5">
               <span className="flex items-center gap-1 font-mono">
                 <Receipt className="w-3.5 h-3.5 text-secondary" /> Factura: <b>{pkg.invoiceNumber}</b>
@@ -446,7 +512,8 @@ export default function PackageDetailPage() {
       </div>
 
       {/* Tarjetas KPI de Resumen Financiero del Paquete */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+        {/* 1. Costo Invertido */}
         <div className="p-4 bg-surface-container-lowest rounded-2xl shadow-xs border border-surface-container-high flex flex-col justify-between">
           <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Costo Invertido</span>
           <span className="text-lg sm:text-xl font-bold font-display text-primary mt-1">
@@ -455,6 +522,20 @@ export default function PackageDetailPage() {
           <span className="text-[11px] text-on-surface-variant mt-0.5">Costo total de adquisición</span>
         </div>
 
+        {/* 2. Total Teórico Estimado (NUEVO) */}
+        <div className="p-4 bg-surface-container-lowest rounded-2xl shadow-xs border border-secondary/30 bg-secondary-fixed/10 flex flex-col justify-between">
+          <span className="text-[10px] font-bold text-secondary uppercase tracking-wider" title="Suma de precios de venta de todas las prendas">
+            Total Teórico (Est.)
+          </span>
+          <span className="text-lg sm:text-xl font-bold font-display text-primary mt-1">
+            {formatCurrency(pkg.totalTheoretical || 0)}
+          </span>
+          <span className="text-[11px] text-secondary font-semibold mt-0.5">
+            {pkg.costPrice > 0 ? `${Math.round(((pkg.totalTheoretical || 0) / pkg.costPrice) * 100)}%` : "0%"} potencial
+          </span>
+        </div>
+
+        {/* 3. Total Vendido Real */}
         <div className="p-4 bg-surface-container-lowest rounded-2xl shadow-xs border border-surface-container-high flex flex-col justify-between">
           <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Total Vendido</span>
           <span className="text-lg sm:text-xl font-bold font-display text-emerald-700 mt-1">
@@ -465,6 +546,7 @@ export default function PackageDetailPage() {
           </span>
         </div>
 
+        {/* 4. Estado Financiero */}
         <div className="p-4 bg-surface-container-lowest rounded-2xl shadow-xs border border-surface-container-high flex flex-col justify-between">
           <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Estado Financiero</span>
           <div className="mt-1">
@@ -483,12 +565,13 @@ export default function PackageDetailPage() {
           <span className="text-[11px] text-on-surface-variant mt-0.5">Punto de equilibrio</span>
         </div>
 
-        <div className="p-4 bg-surface-container-lowest rounded-2xl shadow-xs border border-surface-container-high flex flex-col justify-between">
+        {/* 5. Censo de Prendas */}
+        <div className="p-4 bg-surface-container-lowest rounded-2xl shadow-xs border border-surface-container-high flex flex-col justify-between col-span-2 sm:col-span-1">
           <div className="flex justify-between items-center">
             <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Censo de Prendas</span>
             <button
               onClick={() => setShowAddForm(!showAddForm)}
-              className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary-container hover:bg-primary text-on-primary text-[10px] font-bold rounded-lg transition-all shadow-xs"
+              className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary-container hover:bg-primary text-on-primary text-[10px] font-bold rounded-lg transition-all shadow-xs cursor-pointer"
             >
               <Plus className="w-3 h-3 text-secondary-fixed" />
               <span>{showAddForm ? "Cerrar" : "+ Prenda"}</span>
@@ -524,10 +607,17 @@ export default function PackageDetailPage() {
             style={{ width: `${Math.min(pkg.recoveryPercent, 100)}%` }}
           />
         </div>
-        <div className="flex justify-between text-[10px] text-on-surface-variant font-mono font-medium">
-          <span>Q 0.00</span>
-          <span className="text-primary font-bold">Inversión: {formatCurrency(pkg.costPrice)}</span>
-          <span>Vendido: {formatCurrency(pkg.totalSold)}</span>
+        <div className="flex flex-col sm:flex-row justify-between text-[11px] text-on-surface-variant font-mono font-medium gap-1 pt-1 border-t border-surface-container-high/40">
+          <span>Inversión: <b>{formatCurrency(pkg.costPrice)}</b></span>
+          <span className="text-secondary">
+            Teórico Potencial: <b>{formatCurrency(pkg.totalTheoretical || 0)}</b>
+            {(pkg.totalTheoretical || 0) > pkg.costPrice && (
+              <span className="text-emerald-700 font-sans ml-1">
+                (+{formatCurrency((pkg.totalTheoretical || 0) - pkg.costPrice)} ganancia est.)
+              </span>
+            )}
+          </span>
+          <span className="text-emerald-700">Vendido Real: <b>{formatCurrency(pkg.totalSold)}</b></span>
         </div>
       </div>
 
@@ -1239,6 +1329,90 @@ export default function PackageDetailPage() {
           packageCode={pkg.code}
           initialSelectedIds={printSelectedIds}
         />
+      )}
+
+      {/* Modal para Editar Información del Paquete */}
+      {editingPackage && pkg && (
+        <div
+          onClick={() => setEditingPackage(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-surface-container-lowest rounded-2xl max-w-md w-full shadow-2xl border border-surface-container-high overflow-hidden"
+          >
+            <div className="bg-primary-container p-4 text-on-primary flex justify-between items-center">
+              <div>
+                <h3 className="font-bold text-sm font-display">Editar Paquete {pkg.code}</h3>
+                <p className="text-[11px] text-secondary-fixed">Actualiza la referencia, factura o notas del lote</p>
+              </div>
+              <button
+                onClick={() => setEditingPackage(false)}
+                className="text-on-primary-container hover:text-on-primary text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePkgEdit} className="p-5 space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-primary mb-1">
+                  Referencia o Título del Paquete *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej. Ropa Dama Verano Zara, Fardo Suéteres..."
+                  value={pkgEditName}
+                  onChange={(e) => setPkgEditName(e.target.value)}
+                  className="w-full px-3 py-2 bg-surface-container-low rounded-xl border border-surface-container-high focus:outline-hidden focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary text-on-surface font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-primary mb-1">
+                  Número de Factura
+                </label>
+                <input
+                  type="text"
+                  value={pkgEditInvoice}
+                  onChange={(e) => setPkgEditInvoice(e.target.value)}
+                  className="w-full px-3 py-2 bg-surface-container-low rounded-xl border border-surface-container-high focus:outline-hidden focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary text-on-surface font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-primary mb-1">
+                  Notas o Descripción
+                </label>
+                <textarea
+                  rows={2}
+                  value={pkgEditNotes}
+                  onChange={(e) => setPkgEditNotes(e.target.value)}
+                  className="w-full px-3 py-2 bg-surface-container-low rounded-xl border border-surface-container-high focus:outline-hidden focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary text-on-surface resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-surface-container-high">
+                <button
+                  type="button"
+                  onClick={() => setEditingPackage(false)}
+                  className="px-4 py-2 font-semibold text-on-surface-variant hover:text-on-surface"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingPkgEdit}
+                  className="px-5 py-2 font-bold bg-primary hover:bg-primary-container text-on-primary rounded-xl disabled:opacity-50 transition-all shadow-xs flex items-center gap-1.5"
+                >
+                  {savingPkgEdit && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{savingPkgEdit ? "Guardando..." : "Guardar Cambios"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

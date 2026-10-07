@@ -15,8 +15,9 @@ import {
 import { formatCurrency, formatWeight, formatDate } from "@/lib/utils";
 
 interface PackageItem {
-  id: number;
+  id: number | string;
   code: string;
+  name?: string | null;
   packageType: string;
   costPrice: number;
   invoiceNumber: string;
@@ -29,6 +30,7 @@ interface PackageItem {
   reservedProducts: number;
   availableProducts: number;
   totalSold: number;
+  totalTheoretical?: number;
   isRecovered: boolean;
   profit: number;
   recoveryPercent: number;
@@ -39,6 +41,7 @@ export default function PackagesPage() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState({
+    name: "",
     packageType: "caja",
     costPrice: "",
     invoiceNumber: "",
@@ -86,6 +89,7 @@ export default function PackagesPage() {
 
       setIsModalOpen(false);
       setFormData({
+        name: "",
         packageType: "caja",
         costPrice: "",
         invoiceNumber: "",
@@ -121,14 +125,18 @@ export default function PackagesPage() {
   // Filtrado
   const filteredPackages = packages.filter((pkg) => {
     const matchesType = filterType === "all" || pkg.packageType.toLowerCase() === filterType.toLowerCase();
-    const matchesSearch = !searchQuery || 
-      pkg.code.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      pkg.invoiceNumber.toLowerCase().includes(searchQuery.toLowerCase());
+    const query = searchQuery.toLowerCase().trim();
+    const matchesSearch = !query || 
+      pkg.code.toLowerCase().includes(query) || 
+      pkg.invoiceNumber.toLowerCase().includes(query) ||
+      (pkg.name && pkg.name.toLowerCase().includes(query)) ||
+      (pkg.notes && pkg.notes.toLowerCase().includes(query));
     return matchesType && matchesSearch;
   });
 
   // KPIs
   const totalInvested = packages.reduce((acc, p) => acc + Number(p.costPrice || 0), 0);
+  const totalTheoretical = packages.reduce((acc, p) => acc + Number(p.totalTheoretical || 0), 0);
   const totalSold = packages.reduce((acc, p) => acc + Number(p.totalSold || 0), 0);
   const totalNetProfit = packages.reduce((acc, p) => acc + (p.isRecovered ? Number(p.profit || 0) : 0), 0);
   const totalGarments = packages.reduce((acc, p) => acc + Number(p.totalProducts || 0), 0);
@@ -155,7 +163,7 @@ export default function PackagesPage() {
       </div>
 
       {/* Métricas Resumen KPI */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         <div className="bg-surface-container-lowest rounded-2xl p-4 shadow-xs border border-surface-container-high flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">
@@ -171,6 +179,25 @@ export default function PackagesPage() {
             </div>
             <div className="text-[11px] text-on-surface-variant mt-0.5">
               En {packages.length} lotes registrados
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-surface-container-lowest rounded-2xl p-4 shadow-xs border border-secondary/30 bg-secondary-fixed/10 flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold text-secondary uppercase tracking-wider">
+              Total Teórico Est.
+            </span>
+            <span className="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed text-[10px] font-bold">
+              Potencial
+            </span>
+          </div>
+          <div className="mt-2">
+            <div className="text-lg sm:text-xl font-bold font-display text-primary leading-tight">
+              {formatCurrency(totalTheoretical)}
+            </div>
+            <div className="text-[11px] text-secondary font-semibold mt-0.5">
+              {totalInvested > 0 ? `${Math.round((totalTheoretical / totalInvested) * 100)}%` : "0%"} recuperación est.
             </div>
           </div>
         </div>
@@ -213,7 +240,7 @@ export default function PackagesPage() {
           </div>
         </div>
 
-        <div className="bg-surface-container-lowest rounded-2xl p-4 shadow-xs border border-surface-container-high flex flex-col justify-between">
+        <div className="bg-surface-container-lowest rounded-2xl p-4 shadow-xs border border-surface-container-high flex flex-col justify-between col-span-2 sm:col-span-1">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">
               Prendas Ingresadas
@@ -302,33 +329,53 @@ export default function PackagesPage() {
             >
               <div className="p-5 space-y-4">
                 {/* Cabecera de la tarjeta */}
-                <div className="flex items-start justify-between">
-                  <div>
-                    <span className="text-xs font-mono font-bold text-primary uppercase">
-                      {pkg.code}
-                    </span>
-                    <div className="mt-1 flex items-center gap-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-mono font-bold text-primary uppercase bg-surface-container-low px-2 py-0.5 rounded-md border border-surface-container-high">
+                        {pkg.code}
+                      </span>
                       {getPackageTypeBadge(pkg.packageType)}
-                      <span className="text-xs text-on-surface-variant flex items-center gap-1 font-mono">
-                        <Receipt className="w-3.5 h-3.5" />
+                    </div>
+                    {pkg.name ? (
+                      <h3 className="font-bold text-sm text-primary mt-1.5 truncate" title={pkg.name}>
+                        {pkg.name}
+                      </h3>
+                    ) : (
+                      <h3 className="text-xs italic text-on-surface-variant mt-1.5">
+                        Sin título de referencia
+                      </h3>
+                    )}
+                    <div className="mt-1 flex items-center gap-2 text-xs text-on-surface-variant font-mono">
+                      <span className="flex items-center gap-1">
+                        <Receipt className="w-3.5 h-3.5 text-secondary" />
                         {pkg.invoiceNumber}
                       </span>
+                      {pkg.totalWeight && (
+                        <>
+                          <span>•</span>
+                          <span className="flex items-center gap-0.5">
+                            <Scale className="w-3 h-3 text-secondary" />
+                            {formatWeight(pkg.totalWeight)}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                   {pkg.isRecovered ? (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 shrink-0">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                       Recuperado
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200 shrink-0">
                       <Clock className="w-3.5 h-3.5 text-amber-600" />
                       {pkg.recoveryPercent}%
                     </span>
                   )}
                 </div>
 
-                {/* Métricas de Inversión, Peso y Ventas */}
+                {/* Métricas de Inversión, Teórico y Vendido */}
                 <div className="grid grid-cols-3 gap-2 bg-surface-container-low p-2.5 rounded-xl text-center">
                   <div className="flex flex-col">
                     <span className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider">Inversión</span>
@@ -337,21 +384,22 @@ export default function PackagesPage() {
                     </span>
                   </div>
                   <div className="flex flex-col border-x border-surface-container-high">
-                    <span className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider">Peso</span>
-                    <span className="font-bold text-xs text-on-surface mt-0.5 flex items-center justify-center gap-0.5">
-                      <Scale className="w-3 h-3 text-secondary" />
-                      {formatWeight(pkg.totalWeight)}
+                    <span className="text-[10px] text-secondary font-bold uppercase tracking-wider" title="Total teórico: suma de precios de venta de todas las prendas">
+                      Teórico Est.
+                    </span>
+                    <span className="font-bold text-xs text-secondary mt-0.5 font-display">
+                      {formatCurrency(pkg.totalTheoretical || 0)}
                     </span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider">Vendido</span>
-                    <span className="font-bold text-xs text-secondary mt-0.5">
+                    <span className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider">Vendido Real</span>
+                    <span className="font-bold text-xs text-emerald-700 mt-0.5">
                       {formatCurrency(pkg.totalSold)}
                     </span>
                   </div>
                 </div>
 
-                {/* Barra de Progreso de Breakeven */}
+                {/* Barra de Progreso de Breakeven y Estimación */}
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs">
                     <span className="text-on-surface-variant font-medium">Recuperación de Lote:</span>
@@ -367,11 +415,19 @@ export default function PackagesPage() {
                       style={{ width: `${Math.min(pkg.recoveryPercent, 100)}%` }}
                     />
                   </div>
-                  {pkg.isRecovered && (
+                  {pkg.isRecovered ? (
                     <div className="text-[11px] text-emerald-700 font-bold text-right">
                       Ganancia Neta: +{formatCurrency(pkg.profit)}
                     </div>
-                  )}
+                  ) : pkg.totalTheoretical && pkg.totalTheoretical > 0 ? (
+                    <div className="flex justify-between items-center text-[11px] bg-secondary-fixed/20 text-on-secondary-fixed px-2.5 py-1 rounded-lg font-medium">
+                      <span>Recuperación potencial est.:</span>
+                      <b className="font-bold font-mono">
+                        {pkg.costPrice > 0 ? `${Math.round((pkg.totalTheoretical / pkg.costPrice) * 100)}%` : "0%"}
+                        {" "}(+{formatCurrency(Math.max(0, pkg.totalTheoretical - pkg.costPrice))})
+                      </b>
+                    </div>
+                  ) : null}
                 </div>
 
                 {/* Resumen de Inventario */}
@@ -424,6 +480,23 @@ export default function PackagesPage() {
                   {errorMsg}
                 </div>
               )}
+
+              <div>
+                <label className="block text-xs font-bold text-primary mb-1">
+                  Referencia o Título del Paquete *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej. Lote Ropa Dama Verano Zara, Fardo Suéteres..."
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-3 py-2 text-xs bg-surface-container-low rounded-xl border border-surface-container-high focus:outline-hidden focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary text-on-surface font-medium placeholder:text-outline-variant"
+                />
+                <p className="text-[10px] text-on-surface-variant mt-0.5">
+                  Nombre descriptivo para identificar rápidamente el contenido del paquete.
+                </p>
+              </div>
 
               <div>
                 <label className="block text-xs font-bold text-primary mb-1.5">

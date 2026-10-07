@@ -37,9 +37,11 @@ export async function GET() {
       const reservedProducts = pkg.products.filter((p) => p.status === "apartado").length;
       const availableProducts = pkg.products.filter((p) => p.status === "disponible").length;
 
-      // Calcular total vendido
+      // Calcular total vendido y total teórico
       let totalSold = 0;
+      let totalTheoretical = 0;
       pkg.products.forEach((p) => {
+        totalTheoretical += Number(p.salePrice || 0);
         p.orderItems.forEach((item) => {
           if (["pagado", "enviado", "entregado"].includes(item.order.status)) {
             totalSold += Number(item.finalPrice);
@@ -55,6 +57,7 @@ export async function GET() {
       return {
         id: pkg.id,
         code: pkg.code,
+        name: (pkg as any).name || null,
         packageType: pkg.packageType,
         costPrice: cost,
         invoiceNumber: pkg.invoiceNumber,
@@ -67,6 +70,7 @@ export async function GET() {
         reservedProducts,
         availableProducts,
         totalSold,
+        totalTheoretical,
         isRecovered,
         profit,
         recoveryPercent,
@@ -82,7 +86,7 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { packageType, costPrice, invoiceNumber, totalWeight, notes } = body;
+    const { name, reference, title, packageType, costPrice, invoiceNumber, totalWeight, notes } = body;
 
     if (!packageType || costPrice === undefined || !invoiceNumber) {
       return NextResponse.json(
@@ -98,6 +102,7 @@ export async function POST(req: Request) {
 
     const count = await prisma.package.count();
     const code = `PKG-${new Date().getFullYear()}-${String(count + 1).padStart(3, "0")}`;
+    const pkgName = (name || reference || title || "").trim() || null;
 
     const newPackage = await prisma.package.create({
       data: {
@@ -106,7 +111,7 @@ export async function POST(req: Request) {
         costPrice: Number(costPrice),
         invoiceNumber,
         totalWeight: totalWeight ? Number(totalWeight) : null,
-        notes: notes || null,
+        notes: pkgName ? `[${pkgName}] ${notes || ""}`.trim() : (notes || null),
         status: "recibido",
       },
     });

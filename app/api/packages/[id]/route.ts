@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getFirestorePackageById } from "@/lib/firestore-service";
+import { getFirestorePackageById, updateFirestorePackage } from "@/lib/firestore-service";
 
 export async function GET(
   req: Request,
@@ -41,7 +41,9 @@ export async function GET(
     }
 
     let totalSold = 0;
+    let totalTheoretical = 0;
     pkg.products.forEach((p) => {
+      totalTheoretical += Number(p.salePrice || 0);
       p.orderItems.forEach((item) => {
         if (["pagado", "enviado", "entregado"].includes(item.order.status)) {
           totalSold += Number(item.finalPrice);
@@ -59,10 +61,49 @@ export async function GET(
       costPrice: cost,
       totalWeight: pkg.totalWeight ? Number(pkg.totalWeight) : null,
       totalSold,
+      totalTheoretical,
       isRecovered,
       profit,
       recoveryPercent,
     });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function PUT(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const body = await req.json();
+
+    if (process.env.DATABASE_PROVIDER === "firestore") {
+      const updated = await updateFirestorePackage(params.id, body);
+      return NextResponse.json(updated);
+    }
+
+    const id = parseInt(params.id);
+    if (isNaN(id)) {
+      return NextResponse.json({ error: "ID inválido" }, { status: 400 });
+    }
+
+    const pkgName = (body.name || body.reference || body.title || "").trim();
+    const updateData: any = {};
+    if (body.packageType !== undefined) updateData.packageType = body.packageType;
+    if (body.costPrice !== undefined) updateData.costPrice = Number(body.costPrice);
+    if (body.invoiceNumber !== undefined) updateData.invoiceNumber = body.invoiceNumber;
+    if (body.totalWeight !== undefined) updateData.totalWeight = body.totalWeight ? Number(body.totalWeight) : null;
+    if (body.notes !== undefined || pkgName) {
+      updateData.notes = pkgName ? `[${pkgName}] ${body.notes || ""}`.trim() : body.notes;
+    }
+
+    const updated = await prisma.package.update({
+      where: { id },
+      data: updateData,
+    });
+
+    return NextResponse.json(updated);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

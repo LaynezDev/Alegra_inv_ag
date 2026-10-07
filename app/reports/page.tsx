@@ -5,8 +5,9 @@ import Link from "next/link";
 import { formatCurrency, formatWeight, formatDate } from "@/lib/utils";
 
 interface PackageReport {
-  id: number;
+  id: number | string;
   code: string;
+  name?: string | null;
   packageType: string;
   invoiceNumber: string;
   costPrice: number;
@@ -17,6 +18,7 @@ interface PackageReport {
   availableCount: number;
   reservedCount: number;
   packageSoldAmount: number;
+  totalTheoretical?: number;
   isRecovered: boolean;
   recoveryPercentage: number;
   profit: number;
@@ -112,11 +114,12 @@ export default function ReportsPage() {
         return false;
       }
       if (searchQuery) {
-        const q = searchQuery.toLowerCase();
+        const q = searchQuery.toLowerCase().trim();
         const matches =
           p.code.toLowerCase().includes(q) ||
           p.invoiceNumber.toLowerCase().includes(q) ||
-          p.packageType.toLowerCase().includes(q);
+          p.packageType.toLowerCase().includes(q) ||
+          (p.name && p.name.toLowerCase().includes(q));
         if (!matches) return false;
       }
       return true;
@@ -608,6 +611,11 @@ export default function ReportsPage() {
                               • {pkg.packageType}
                             </span>
                           </div>
+                          {pkg.name && (
+                            <h3 className="font-bold text-xs sm:text-sm text-secondary mt-0.5">
+                              {pkg.name}
+                            </h3>
+                          )}
                           <p className="text-xs text-outline mt-0.5">
                             Factura: <strong className="text-primary font-mono">{pkg.invoiceNumber}</strong>
                             {pkg.totalWeight && (
