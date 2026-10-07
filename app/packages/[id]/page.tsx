@@ -21,9 +21,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Trash2,
-  Loader2
+  Loader2,
+  Printer
 } from "lucide-react";
 import BarcodeDisplay from "@/components/BarcodeDisplay";
+import BarcodePrintModal from "@/components/BarcodePrintModal";
 import { formatCurrency, formatWeight, calculateCostByWeight } from "@/lib/utils";
 
 interface Product {
@@ -90,6 +92,10 @@ export default function PackageDetailPage() {
   // Visibilidad de prendas: ocultar vendidas por defecto
   const [showSold, setShowSold] = useState(false);
   const [deletingProductId, setDeletingProductId] = useState<number | string | null>(null);
+
+  // Modal de impresión de códigos de barra
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [printSelectedIds, setPrintSelectedIds] = useState<(string | number)[]>([]);
 
   // Estado Lightbox / Visualizador de Imágenes en Grande
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -335,6 +341,17 @@ export default function PackageDetailPage() {
     }
   };
 
+  // Abrir Modal de Impresión
+  const handleOpenPrintAll = () => {
+    setPrintSelectedIds([]);
+    setPrintModalOpen(true);
+  };
+
+  const handleOpenPrintSingle = (prod: Product) => {
+    setPrintSelectedIds([prod.id]);
+    setPrintModalOpen(true);
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "disponible":
@@ -386,32 +403,46 @@ export default function PackageDetailPage() {
   return (
     <div className="space-y-6">
       {/* Botón Volver y Encabezado */}
-      <div className="flex items-center gap-3 pb-2 border-b border-surface-container-high">
-        <Link
-          href="/packages"
-          className="p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container-low rounded-xl transition-colors border border-surface-container-high"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-bold font-display text-primary">
-              Paquete {pkg.code}
-            </h1>
-            <span className="px-2.5 py-0.5 text-xs font-bold rounded-full bg-secondary-fixed text-on-secondary-fixed border border-secondary/20 uppercase">
-              {pkg.packageType}
-            </span>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-surface-container-high">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/packages"
+            className="p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container-low rounded-xl transition-colors border border-surface-container-high"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl sm:text-2xl font-bold font-display text-primary">
+                Paquete {pkg.code}
+              </h1>
+              <span className="px-2.5 py-0.5 text-xs font-bold rounded-full bg-secondary-fixed text-on-secondary-fixed border border-secondary/20 uppercase">
+                {pkg.packageType}
+              </span>
+            </div>
+            <p className="text-xs text-on-surface-variant flex items-center gap-3 mt-0.5">
+              <span className="flex items-center gap-1 font-mono">
+                <Receipt className="w-3.5 h-3.5 text-secondary" /> Factura: <b>{pkg.invoiceNumber}</b>
+              </span>
+              <span>•</span>
+              <span className="flex items-center gap-1">
+                <Scale className="w-3.5 h-3.5 text-secondary" /> Peso: <b>{formatWeight(pkg.totalWeight)}</b>
+              </span>
+            </p>
           </div>
-          <p className="text-xs text-on-surface-variant flex items-center gap-3 mt-0.5">
-            <span className="flex items-center gap-1 font-mono">
-              <Receipt className="w-3.5 h-3.5 text-secondary" /> Factura: <b>{pkg.invoiceNumber}</b>
-            </span>
-            <span>•</span>
-            <span className="flex items-center gap-1">
-              <Scale className="w-3.5 h-3.5 text-secondary" /> Peso: <b>{formatWeight(pkg.totalWeight)}</b>
-            </span>
-          </p>
         </div>
+
+        {pkg.products.length > 0 && (
+          <button
+            type="button"
+            onClick={handleOpenPrintAll}
+            className="inline-flex items-center gap-2 px-3.5 py-2 bg-surface-container-low hover:bg-surface-container-high text-primary text-xs font-bold rounded-xl border border-surface-container-high transition-all shadow-xs self-start sm:self-auto cursor-pointer"
+            title="Imprimir todos o seleccionar códigos de barra"
+          >
+            <Printer className="w-4 h-4 text-secondary" />
+            <span>Imprimir Códigos ({pkg.products.length})</span>
+          </button>
+        )}
       </div>
 
       {/* Tarjetas KPI de Resumen Financiero del Paquete */}
@@ -690,25 +721,39 @@ export default function PackageDetailPage() {
                 <span>Manifiesto de Prendas ({activeProducts.length} activas)</span>
               </h2>
 
-              {soldCount > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowSold(!showSold)}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-xl border border-surface-container-high bg-surface-container-lowest hover:bg-surface-container-low text-on-surface transition-colors flex items-center gap-1.5 self-start sm:self-auto shadow-xs"
-                >
-                  {showSold ? (
-                    <>
-                      <Eye className="w-3.5 h-3.5 text-on-surface-variant" />
-                      <span>Ocultar vendidas ({soldCount})</span>
-                    </>
-                  ) : (
-                    <>
-                      <Eye className="w-3.5 h-3.5 text-secondary" />
-                      <span>Mostrar vendidas ({soldCount})</span>
-                    </>
-                  )}
-                </button>
-              )}
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                {pkg.products.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleOpenPrintAll}
+                    className="text-xs font-bold px-3 py-1.5 rounded-xl border border-secondary/30 bg-secondary-fixed/30 hover:bg-secondary-fixed/50 text-on-secondary-fixed transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+                    title="Imprimir todos o seleccionar códigos de barra"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-secondary" />
+                    <span>Imprimir Códigos</span>
+                  </button>
+                )}
+
+                {soldCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowSold(!showSold)}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-xl border border-surface-container-high bg-surface-container-lowest hover:bg-surface-container-low text-on-surface transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    {showSold ? (
+                      <>
+                        <Eye className="w-3.5 h-3.5 text-on-surface-variant" />
+                        <span>Ocultar vendidas ({soldCount})</span>
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="w-3.5 h-3.5 text-secondary" />
+                        <span>Mostrar vendidas ({soldCount})</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
 
             {pkg.products.length === 0 ? (
@@ -781,6 +826,13 @@ export default function PackageDetailPage() {
                             <div className="flex items-center justify-between gap-1 mb-1">
                               {getStatusBadge(prod.status)}
                               <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => handleOpenPrintSingle(prod)}
+                                  className="p-1 text-on-surface-variant hover:text-primary hover:bg-surface-container-low rounded-lg transition-colors cursor-pointer"
+                                  title="Imprimir código de barra de esta prenda"
+                                >
+                                  <Printer className="w-3.5 h-3.5" />
+                                </button>
                                 <button
                                   onClick={() => handleOpenEditModal(prod)}
                                   className="p-1 text-on-surface-variant hover:text-primary hover:bg-surface-container-low rounded-lg transition-colors"
@@ -1176,6 +1228,17 @@ export default function PackageDetailPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Modal de Impresión Masiva y Selectiva de Códigos de Barra */}
+      {pkg && (
+        <BarcodePrintModal
+          isOpen={printModalOpen}
+          onClose={() => setPrintModalOpen(false)}
+          products={pkg.products}
+          packageCode={pkg.code}
+          initialSelectedIds={printSelectedIds}
+        />
       )}
     </div>
   );
