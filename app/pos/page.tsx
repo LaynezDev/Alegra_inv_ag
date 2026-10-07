@@ -23,7 +23,7 @@ import { formatCurrency } from "@/lib/utils";
 import { playScanSuccessSound, playScanErrorSound } from "@/lib/sound";
 
 interface Customer {
-  id: number;
+  id: number | string;
   barcode: string;
   fullName: string;
   tiktokUsername: string | null;
@@ -38,7 +38,7 @@ interface Customer {
 }
 
 interface CartItem {
-  productId: number;
+  productId: number | string;
   barcode: string;
   name: string;
   originalPrice: number;
@@ -290,7 +290,7 @@ export default function PosLivePage() {
   };
 
   // Modificar descuento de un producto en la comanda activa
-  const handleDiscountChange = (productId: number, discountValue: string) => {
+  const handleDiscountChange = (productId: number | string, discountValue: string) => {
     if (!activeTab) return;
     const discount = Math.max(0, parseFloat(discountValue) || 0);
 
@@ -316,7 +316,7 @@ export default function PosLivePage() {
   };
 
   // Quitar producto de la comanda
-  const handleRemoveItem = (productId: number) => {
+  const handleRemoveItem = (productId: number | string) => {
     if (!activeTab) return;
     setTabs((prev) =>
       prev.map((t) => {
@@ -416,117 +416,163 @@ export default function PosLivePage() {
 
   return (
     <div className="space-y-4">
-      {/* Barra Superior de Pestañas de Comandas Multi-Cliente */}
-      <div className="bg-white rounded-xl border border-alegra-border p-2 shadow-xs">
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
-          <button
-            onClick={() => {
-              setIsCustomerModalOpen(true);
-              fetchCustomers("");
-            }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-alegra-navy text-white text-xs font-semibold rounded-lg hover:bg-alegra-navy-light transition-colors shrink-0 shadow-xs"
-          >
-            <Plus className="w-4 h-4 text-alegra-sand" />
-            <span>Nueva Comanda</span>
-          </button>
+      {/* Sub-Barra de Estado Operativo & Multi-Comanda Live */}
+      <section className="w-full bg-surface-container-lowest p-3 sm:p-4 rounded-2xl shadow-xs border border-surface-container-high">
+        <div className="w-full flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3">
+          {/* Multi-Comandas: Switcher Tabs */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 xl:pb-0 scrollbar-thin">
+            {/* Botón Nueva Comanda */}
+            <button
+              onClick={() => {
+                setIsCustomerModalOpen(true);
+                fetchCustomers("");
+              }}
+              className="group flex items-center gap-1.5 bg-primary-container hover:bg-primary text-on-primary px-3.5 py-2 rounded-xl text-xs font-semibold transition-all shadow-xs shrink-0"
+              id="btn-new-ticket"
+            >
+              <Plus className="w-4 h-4 text-secondary-fixed" />
+              <span>Nueva Comanda</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-container/20 text-secondary-fixed font-bold">
+                +
+              </span>
+            </button>
 
-          <div className="h-6 w-px bg-gray-200 mx-1 shrink-0" />
+            <div className="h-6 w-px bg-surface-container-high mx-1 shrink-0" />
 
-          {tabs.length === 0 ? (
-            <span className="text-xs text-gray-400 italic px-2">
-              No hay cuentas abiertas. Haz clic en "Nueva Comanda" para comenzar.
-            </span>
-          ) : (
-            tabs.map((tab) => {
-              const isActive = tab.id === activeTabId;
-              const tabTotal = tab.items.reduce((acc, i) => acc + i.finalPrice, 0);
+            {tabs.length === 0 ? (
+              <span className="text-xs text-on-surface-variant italic px-2">
+                No hay cuentas abiertas. Haz clic en "Nueva Comanda" para comenzar.
+              </span>
+            ) : (
+              tabs.map((tab) => {
+                const isActive = tab.id === activeTabId;
+                const tabTotal = tab.items.reduce((acc, i) => acc + i.finalPrice, 0);
 
-              return (
-                <div
-                  key={tab.id}
-                  onClick={() => setActiveTabId(tab.id)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all border shrink-0 ${
-                    isActive
-                      ? "bg-alegra-navy text-white border-alegra-navy shadow-xs"
-                      : "bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100"
-                  }`}
-                >
-                  <div className="flex flex-col text-left">
-                    <span className="font-semibold truncate max-w-[120px]">
-                      {tab.customer.fullName}
-                    </span>
-                    <span className={`text-[10px] ${isActive ? "text-alegra-sand" : "text-gray-500"}`}>
-                      {tab.items.length} prendas • {formatCurrency(tabTotal)}
-                    </span>
-                  </div>
-
-                  <button
-                    onClick={(e) => handleCloseTab(tab.id, e)}
-                    className={`p-1 rounded-md transition-colors ${
-                      isActive ? "hover:bg-white/20 text-gray-300 hover:text-white" : "hover:bg-gray-200 text-gray-400"
+                return (
+                  <div
+                    key={tab.id}
+                    onClick={() => setActiveTabId(tab.id)}
+                    className={`flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-medium cursor-pointer transition-all border shrink-0 ${
+                      isActive
+                        ? "bg-primary-container text-on-primary border-primary-container shadow-md"
+                        : "bg-surface-container-low hover:bg-surface-container text-on-surface border-surface-container-high"
                     }`}
-                    title="Cerrar comanda"
                   >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
+                    <div className={`w-2 h-2 rounded-full ${isActive ? "bg-secondary-fixed" : "bg-outline-variant"}`} />
+                    <div className="flex flex-col text-left">
+                      <span className={`font-semibold truncate max-w-[130px] ${isActive ? "text-surface-container-lowest" : "text-primary"}`}>
+                        {tab.customer.fullName}
+                      </span>
+                      <span className={`text-[10px] ${isActive ? "text-secondary-fixed" : "text-on-surface-variant"}`}>
+                        {tab.items.length} prendas • <strong className="font-bold">{formatCurrency(tabTotal)}</strong>
+                      </span>
+                    </div>
 
-      {/* Caja de Escaneo Continuo en Vivo */}
-      <div className="bg-white rounded-xl border border-alegra-border p-4 shadow-xs">
-        <form onSubmit={handleBarcodeSubmit} className="flex gap-2">
-          <div className="relative flex-1">
-            <Barcode className="w-5 h-5 text-alegra-sand-dark absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <button
+                      onClick={(e) => handleCloseTab(tab.id, e)}
+                      className={`p-1 rounded-lg transition-colors ml-1 ${
+                        isActive
+                          ? "hover:bg-primary/50 text-surface-container-highest"
+                          : "hover:bg-surface-variant text-on-surface-variant"
+                      }`}
+                      title="Cerrar comanda"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Live Broadcast Status Badge */}
+          <div className="flex items-center gap-3 shrink-0 self-end xl:self-center">
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-error-container text-on-error-container text-xs font-bold uppercase tracking-wider">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-error opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-error"></span>
+              </span>
+              <span>Modo Live Activo</span>
+            </div>
+            <div className="flex items-center gap-1 text-xs text-on-surface-variant bg-surface-container-low px-3 py-1 rounded-xl font-medium">
+              <Radio className="w-3.5 h-3.5 text-primary" />
+              <span>Transmisión en Vivo</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Barra de Escaneo Continuo (Hardware Barcode Wedge) */}
+      <section className="w-full bg-surface-container-lowest p-3 sm:p-4 rounded-2xl shadow-xs border border-surface-container-high flex flex-col gap-2">
+        <form onSubmit={handleBarcodeSubmit} className="flex flex-col sm:flex-row items-center gap-2">
+          {/* Input Scanner con Auto-Focus visual */}
+          <div className="relative flex-1 w-full">
+            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-primary">
+              <Barcode className="w-5 h-5 text-secondary" />
+            </div>
             <input
               ref={barcodeInputRef}
               type="text"
+              autoFocus
               placeholder={
                 activeTab
-                  ? `Escanear código de barras para la comanda de ${activeTab.customer.fullName}...`
+                  ? `Escanear código de prenda (ALE-XXXXX) o cliente (CLI-XXXXX) para ${activeTab.customer.fullName}...`
                   : "Abre una comanda para comenzar a escanear productos..."
               }
               value={scannedBarcode}
               onChange={(e) => setScannedBarcode(e.target.value)}
-              className="w-full pl-11 pr-4 py-3 text-base bg-alegra-sand-light/20 border-2 border-alegra-navy/20 rounded-lg focus:outline-hidden focus:border-alegra-navy focus:bg-white transition-colors placeholder:text-gray-400 font-mono"
+              className="w-full pl-11 pr-28 py-3 bg-surface-container-low hover:bg-surface-container text-on-surface placeholder:text-on-surface-variant font-mono text-sm rounded-xl outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary-container transition-all"
             />
+            <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center gap-1.5 pointer-events-none">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="text-[10px] font-bold text-on-surface-variant tracking-wider uppercase">
+                Pistola Activa
+              </span>
+            </div>
           </div>
+
+          {/* Botón de Escaneo Manual */}
           <button
             type="submit"
-            className="px-6 py-3 bg-alegra-navy text-white font-semibold text-sm rounded-lg hover:bg-alegra-navy-light transition-colors shadow-xs shrink-0 flex items-center gap-2"
+            className="w-full sm:w-auto px-5 py-3 bg-primary hover:bg-primary-container text-on-primary font-semibold text-xs rounded-xl transition-all shadow-xs shrink-0 flex items-center justify-center gap-1.5"
           >
-            <span>Escanear</span>
+            <Plus className="w-4 h-4 text-secondary-fixed" />
+            <span>Escanear [Enter]</span>
           </button>
         </form>
 
-        {/* Mensaje de Escaneo */}
+        {/* Banner de Feedback Instantáneo */}
         {scanMessage && (
           <div
-            className={`mt-2 p-2.5 rounded-lg text-xs font-medium flex items-center gap-2 ${
+            className={`p-2.5 rounded-xl text-xs font-semibold flex items-center justify-between gap-2 shadow-xs transition-all ${
               scanMessage.type === "success"
-                ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                : "bg-red-50 text-red-800 border border-red-200"
+                ? "bg-secondary-fixed text-on-secondary-fixed border border-secondary/20"
+                : "bg-error-container text-on-error-container border border-error/20"
             }`}
           >
-            {scanMessage.type === "success" ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            ) : (
-              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
-            )}
-            <span>{scanMessage.text}</span>
+            <div className="flex items-center gap-2">
+              {scanMessage.type === "success" ? (
+                <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-error shrink-0" />
+              )}
+              <span>{scanMessage.text}</span>
+            </div>
+            <span className="text-[10px] px-2 py-0.5 rounded bg-surface-container-lowest text-primary font-bold shadow-xs">
+              Reciente
+            </span>
           </div>
         )}
-      </div>
+      </section>
 
       {/* Contenido Principal: Comanda Activa vs Panel Lateral */}
       {!activeTab ? (
-        <div className="text-center py-20 bg-white rounded-xl border border-alegra-border p-8">
-          <ShoppingBag className="w-14 h-14 text-alegra-sand mx-auto mb-3" />
-          <h3 className="text-lg font-bold text-alegra-navy">No hay comanda activa</h3>
-          <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">
+        <div className="text-center py-20 bg-surface-container-lowest rounded-2xl border border-surface-container-high p-8 shadow-xs">
+          <div className="w-16 h-16 rounded-2xl bg-surface-container-low flex items-center justify-center mx-auto mb-3 text-secondary">
+            <ShoppingBag className="w-8 h-8" />
+          </div>
+          <h3 className="text-lg font-bold text-primary font-display">No hay comanda activa</h3>
+          <p className="text-xs text-on-surface-variant mt-1 max-w-md mx-auto">
             Abre una comanda seleccionando un comprador para comenzar a escanear prendas en tu transmisión en vivo.
           </p>
           <button
@@ -534,154 +580,219 @@ export default function PosLivePage() {
               setIsCustomerModalOpen(true);
               fetchCustomers("");
             }}
-            className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 bg-alegra-navy text-white text-sm font-semibold rounded-lg hover:bg-alegra-navy-light transition-colors shadow-xs"
+            className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 bg-primary-container text-on-primary text-xs font-bold rounded-xl hover:bg-primary transition-all shadow-sm"
           >
-            <Plus className="w-4 h-4 text-alegra-sand" />
-            Abrir Nueva Comanda
+            <Plus className="w-4 h-4 text-secondary-fixed" />
+            <span>Abrir Nueva Comanda</span>
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Listado de Productos de la Comanda Activa */}
-          <div className="lg:col-span-2 space-y-4">
-            <div className="bg-white rounded-xl border border-alegra-border p-5 shadow-xs">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-gray-100">
-                <div>
-                  <h2 className="text-lg font-bold text-alegra-navy">
-                    Comanda: {activeTab.customer.fullName}
-                  </h2>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 mt-0.5">
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
+          {/* COLUMNA IZQUIERDA (8 Columnas): Ficha de Cliente & Prendas Escaneadas */}
+          <div className="xl:col-span-8 flex flex-col gap-4 min-w-0">
+            {/* Ficha de Cliente Activa */}
+            <div className="w-full bg-surface-container-lowest p-4 rounded-2xl shadow-xs border border-surface-container-high flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-primary-container text-secondary-fixed flex items-center justify-center text-base font-bold font-display shadow-xs">
+                  {activeTab.customer.fullName.substring(0, 2).toUpperCase()}
+                </div>
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-base font-bold text-primary font-display leading-tight">
+                      {activeTab.customer.fullName}
+                    </h2>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container">
+                      CLIENTE LIVE
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1 flex-wrap text-xs text-on-surface-variant">
                     {activeTab.customer.tiktokUsername && (
-                      <span className="bg-black/5 text-black px-2 py-0.5 rounded font-medium">
-                        TikTok: {activeTab.customer.tiktokUsername}
+                      <span className="inline-flex items-center gap-1 font-medium bg-surface-container-low px-2 py-0.5 rounded-md text-primary">
+                        @{activeTab.customer.tiktokUsername}
                       </span>
                     )}
                     {activeTab.customer.instagramUsername && (
-                      <span className="bg-pink-50 text-pink-700 px-2 py-0.5 rounded font-medium">
+                      <span className="inline-flex items-center gap-1 font-medium bg-pink-50 text-pink-700 px-2 py-0.5 rounded-md">
                         IG: {activeTab.customer.instagramUsername}
                       </span>
                     )}
-                    <span>• Tel: {activeTab.customer.phonePrimary}</span>
+                    <span>• {activeTab.customer.municipality.name}</span>
                   </div>
                 </div>
-                <span className="text-xs bg-alegra-sand-light text-alegra-navy px-2.5 py-1 rounded-full font-semibold border border-alegra-sand/40">
-                  {activeTab.items.length} prendas en comanda
-                </span>
               </div>
 
-              {/* Items List */}
+              {/* Acción Directa WhatsApp & Contador */}
+              <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+                <a
+                  href={`https://wa.me/${activeTab.customer.phonePrimary.replace(/[^0-9]/g, "")}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-container-low hover:bg-surface-container text-primary text-xs font-semibold transition-colors"
+                >
+                  <MessageCircle className="w-4 h-4 text-emerald-600" />
+                  <span>{activeTab.customer.phonePrimary}</span>
+                </a>
+                <div className="px-3 py-1.5 bg-surface-container rounded-xl flex items-center gap-1 text-xs">
+                  <span className="text-on-surface-variant font-medium">Prendas:</span>
+                  <span className="text-primary font-bold">{activeTab.items.length}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Lista de Cards de Prendas Escaneadas */}
+            <div className="w-full flex flex-col gap-2.5">
               {activeTab.items.length === 0 ? (
-                <div className="text-center py-12 text-gray-400">
-                  <Barcode className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-                  <p className="text-sm font-medium">Aún no has escaneado prendas para este cliente</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
+                <div className="text-center py-14 bg-surface-container-lowest rounded-2xl border border-surface-container-high p-6 text-on-surface-variant">
+                  <Barcode className="w-10 h-10 mx-auto mb-2 text-outline-variant" />
+                  <p className="text-sm font-semibold text-primary">Aún no has escaneado prendas para este cliente</p>
+                  <p className="text-xs text-on-surface-variant mt-0.5">
                     Usa tu pistola de código de barras o escribe el código en el recuadro superior.
                   </p>
                 </div>
               ) : (
-                <div className="divide-y divide-gray-100">
-                  {activeTab.items.map((item) => (
-                    <div
-                      key={item.productId}
-                      className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        {item.photoUrl && (
+                activeTab.items.map((item, index) => (
+                  <div
+                    key={item.productId}
+                    className="w-full bg-surface-container-lowest p-3.5 rounded-2xl shadow-xs hover:shadow-sm border border-surface-container-high transition-all flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-14 h-14 rounded-xl bg-surface-container-low overflow-hidden shrink-0 relative border border-surface-container-high">
+                        {item.photoUrl ? (
                           <img
                             src={item.photoUrl}
                             alt={item.name}
-                            className="w-12 h-12 rounded-lg object-cover border border-gray-200 shrink-0"
+                            className="w-full h-full object-cover"
                           />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-outline-variant">
+                            <ShoppingBag className="w-6 h-6" />
+                          </div>
                         )}
-                        <div className="min-w-0">
-                          <h4 className="text-sm font-semibold text-alegra-navy truncate">
-                            {item.name}
-                          </h4>
-                          <span className="text-xs text-gray-400 font-mono">
+                        <span className="absolute top-1 left-1 text-[9px] px-1 py-0.2 bg-primary/80 text-on-primary rounded font-mono font-bold">
+                          #{index + 1}
+                        </span>
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container text-primary">
                             {item.barcode}
                           </span>
                         </div>
-                      </div>
-
-                      <div className="flex items-center gap-4 shrink-0">
-                        {/* Precio Original */}
-                        <div className="text-right">
-                          <span className="text-xs text-gray-400 block">Precio Base</span>
-                          <span className="text-sm font-semibold text-gray-700">
-                            {formatCurrency(item.originalPrice)}
-                          </span>
-                        </div>
-
-                        {/* Descuento por Monto */}
-                        <div className="w-24">
-                          <label className="text-[10px] text-gray-400 block mb-0.5 font-medium">
-                            Desc. Monto (Q)
-                          </label>
-                          <input
-                            type="number"
-                            step="1"
-                            min="0"
-                            placeholder="0"
-                            value={item.discountAmount || ""}
-                            onChange={(e) => handleDiscountChange(item.productId, e.target.value)}
-                            className="w-full px-2 py-1 text-xs font-semibold text-red-600 bg-red-50/50 border border-red-200 rounded focus:outline-hidden focus:border-red-400 text-center"
-                          />
-                        </div>
-
-                        {/* Precio Final */}
-                        <div className="text-right min-w-[70px]">
-                          <span className="text-xs text-gray-400 block">Final</span>
-                          <span className="text-base font-bold text-alegra-navy">
-                            {formatCurrency(item.finalPrice)}
-                          </span>
-                        </div>
-
-                        {/* Botón Eliminar */}
-                        <button
-                          onClick={() => handleRemoveItem(item.productId)}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Quitar producto de comanda"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <h4 className="text-xs sm:text-sm font-bold text-primary truncate mt-0.5">
+                          {item.name}
+                        </h4>
                       </div>
                     </div>
-                  ))}
-                </div>
+
+                    {/* Precios, Descuento y Eliminar */}
+                    <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                      <div className="flex flex-col text-right">
+                        <span className="text-xs text-on-surface-variant line-through">
+                          {formatCurrency(item.originalPrice)}
+                        </span>
+                        <span className="text-[9px] text-secondary font-bold uppercase tracking-wider">
+                          P. Lista
+                        </span>
+                      </div>
+
+                      {/* Input Descuento */}
+                      <div className="flex flex-col items-center">
+                        <div className="flex items-center bg-surface-container-low rounded-xl px-2 py-1 border border-surface-container-high">
+                          <span className="text-xs text-on-surface-variant font-medium mr-1">-Q</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={item.discountAmount || ""}
+                            onChange={(e) => handleDiscountChange(item.productId, e.target.value)}
+                            className="w-12 bg-transparent text-center text-xs font-bold outline-none text-primary font-mono"
+                            placeholder="0"
+                          />
+                        </div>
+                        <span className="text-[9px] text-on-surface-variant mt-0.5 uppercase tracking-wider font-semibold">
+                          Descuento
+                        </span>
+                      </div>
+
+                      {/* Total Prenda */}
+                      <div className="flex flex-col text-right min-w-[70px]">
+                        <span className="text-sm font-bold text-primary">
+                          {formatCurrency(item.finalPrice)}
+                        </span>
+                        <span className="text-[9px] text-secondary font-bold uppercase tracking-wider">
+                          Subtotal
+                        </span>
+                      </div>
+
+                      {/* Eliminar */}
+                      <button
+                        onClick={() => handleRemoveItem(item.productId)}
+                        className="p-1.5 text-on-surface-variant hover:text-error hover:bg-error-container/20 rounded-xl transition-colors"
+                        title="Quitar prenda de comanda"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))
               )}
+            </div>
+
+            {/* Quick Scan Tip */}
+            <div className="flex items-center justify-between p-2.5 px-4 bg-surface-container-low rounded-xl text-on-surface-variant text-xs">
+              <span className="flex items-center gap-1.5">
+                <Barcode className="w-4 h-4 text-primary" />
+                <span>Atajos: El lector ingresa prendas al instante. Presiona Tab para editar descuentos.</span>
+              </span>
+              <span className="text-[10px] text-secondary font-bold uppercase">Escaneo Rápido</span>
             </div>
           </div>
 
-          {/* Resumen de Cobro y Cierre de Comanda */}
-          <div className="space-y-4">
-            <div className="bg-white rounded-xl border border-alegra-border p-5 shadow-xs space-y-4">
-              <h3 className="font-bold text-base text-alegra-navy pb-2 border-b border-gray-100 flex items-center gap-2">
-                <Receipt className="w-4 h-4 text-alegra-sand-dark" />
-                Resumen de Venta
-              </h3>
-
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between text-gray-600">
-                  <span>Subtotal prendas:</span>
-                  <span className="font-semibold">{formatCurrency(subtotal)}</span>
+          {/* COLUMNA DERECHA (4 Columnas): Totales, Observaciones y Cierre */}
+          <div className="xl:col-span-4 flex flex-col gap-4">
+            <div className="w-full bg-surface-container-lowest p-5 rounded-2xl shadow-xs border border-surface-container-high flex flex-col gap-4">
+              <div className="flex items-center justify-between pb-2 border-b border-surface-container-high">
+                <div className="flex items-center gap-1.5">
+                  <Receipt className="w-4 h-4 text-primary" />
+                  <span className="font-bold text-sm text-primary font-display">Liquidación Live</span>
                 </div>
-                {totalDiscount > 0 && (
-                  <div className="flex justify-between text-red-600">
-                    <span>Descuentos aplicados:</span>
-                    <span className="font-semibold">-{formatCurrency(totalDiscount)}</span>
-                  </div>
-                )}
-                <div className="pt-2 border-t border-gray-200 flex justify-between items-baseline">
-                  <span className="text-base font-bold text-alegra-navy">Total a Cobrar:</span>
-                  <span className="text-2xl font-black text-alegra-navy">
-                    {formatCurrency(totalToPay)}
-                  </span>
-                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed">
+                  {activeTab.items.length} Artículos
+                </span>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Notas de Entrega o Comentarios
+              {/* Desglose */}
+              <div className="flex flex-col gap-2 text-xs text-on-surface-variant">
+                <div className="flex items-center justify-between">
+                  <span>Subtotal prendas:</span>
+                  <span className="text-primary font-semibold">{formatCurrency(subtotal)}</span>
+                </div>
+                {totalDiscount > 0 && (
+                  <div className="flex items-center justify-between text-secondary">
+                    <span className="flex items-center gap-1">
+                      <span>Descuentos aplicados:</span>
+                    </span>
+                    <span className="font-bold">-{formatCurrency(totalDiscount)}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Total a Pagar Prominente */}
+              <div className="p-4 rounded-xl bg-surface-container-low border border-surface-container-high flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-bold text-secondary tracking-wider uppercase">
+                    Total a Pagar
+                  </span>
+                  <span className="text-xs text-on-surface-variant font-medium">Prendas de Comanda</span>
+                </div>
+                <span className="text-2xl font-black text-primary font-display tracking-tight">
+                  {formatCurrency(totalToPay)}
+                </span>
+              </div>
+
+              {/* Observaciones */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-on-surface-variant font-semibold">
+                  Observaciones de Entrega o Live:
                 </label>
                 <textarea
                   rows={2}
@@ -693,23 +804,24 @@ export default function PosLivePage() {
                       prev.map((t) => (t.id === activeTab.id ? { ...t, notes: val } : t))
                     );
                   }}
-                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:outline-hidden focus:border-alegra-navy"
+                  className="w-full p-2.5 bg-surface-container-low rounded-xl text-on-surface text-xs outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary border border-surface-container-high resize-none"
                 />
               </div>
 
+              {/* Botón Principal */}
               <button
                 onClick={handleCheckout}
                 disabled={activeTab.items.length === 0 || isProcessingCheckout}
-                className="w-full py-3.5 px-4 bg-alegra-navy hover:bg-alegra-navy-light text-white font-bold text-sm rounded-xl transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-3.5 px-4 bg-primary hover:bg-primary-container text-on-primary font-bold text-xs rounded-xl transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.99]"
               >
-                <CheckCircle2 className="w-4 h-4 text-alegra-sand" />
-                {isProcessingCheckout
-                  ? "Procesando Apartado..."
-                  : "Finalizar Venta (Pasar a Pendiente)"}
+                <CheckCircle2 className="w-4 h-4 text-secondary-fixed" />
+                <span>
+                  {isProcessingCheckout ? "Procesando Apartado..." : "Finalizar Venta (Pasar a Pendiente)"}
+                </span>
               </button>
 
-              <p className="text-[11px] text-gray-400 text-center leading-relaxed">
-                Al finalizar, los productos pasarán a estado <b>Apartado</b> y podrás imprimir o enviar el recibo detallado al cliente por WhatsApp.
+              <p className="text-[10px] text-on-surface-variant text-center leading-relaxed">
+                Al finalizar, los productos pasarán a estado <b>Apartado</b> y podrás emitir el recibo para el cliente.
               </p>
             </div>
           </div>
@@ -718,18 +830,18 @@ export default function PosLivePage() {
 
       {/* Modal Selección de Comprador */}
       {isCustomerModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-alegra-border overflow-hidden">
-            <div className="bg-alegra-navy p-5 text-white flex justify-between items-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/40 backdrop-blur-xs p-4">
+          <div className="bg-surface-container-lowest rounded-2xl max-w-lg w-full shadow-2xl border border-surface-container-high overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-primary-container p-5 text-on-primary flex justify-between items-center">
               <div>
-                <h3 className="font-bold text-lg">Abrir Comanda para Cliente</h3>
-                <p className="text-xs text-alegra-sand">
+                <h3 className="font-bold text-base font-display">Abrir Comanda para Cliente</h3>
+                <p className="text-xs text-secondary-fixed">
                   Busca por nombre, teléfono o escanea su código de barras
                 </p>
               </div>
               <button
                 onClick={() => setIsCustomerModalOpen(false)}
-                className="text-gray-300 hover:text-white text-xl"
+                className="text-on-primary-container hover:text-on-primary text-xl font-bold"
               >
                 ✕
               </button>
@@ -737,7 +849,7 @@ export default function PosLivePage() {
 
             <div className="p-5 space-y-4">
               <div className="relative">
-                <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <Search className="w-4 h-4 text-on-surface-variant absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   autoFocus
@@ -747,17 +859,17 @@ export default function PosLivePage() {
                     setCustomerSearchQuery(e.target.value);
                     fetchCustomers(e.target.value);
                   }}
-                  className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:border-alegra-navy"
+                  className="w-full pl-10 pr-4 py-2.5 text-xs bg-surface-container-low rounded-xl border border-surface-container-high text-on-surface focus:outline-hidden focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary"
                 />
               </div>
 
-              <div className="max-h-64 overflow-y-auto divide-y divide-gray-100">
+              <div className="max-h-64 overflow-y-auto divide-y divide-surface-container-low">
                 {loadingCustomers ? (
-                  <div className="py-8 text-center text-xs text-gray-400">
+                  <div className="py-8 text-center text-xs text-on-surface-variant">
                     Buscando clientes...
                   </div>
                 ) : customersList.length === 0 ? (
-                  <div className="py-8 text-center text-xs text-gray-500">
+                  <div className="py-8 text-center text-xs text-on-surface-variant">
                     No se encontró ningún cliente con ese criterio.
                   </div>
                 ) : (
@@ -765,19 +877,19 @@ export default function PosLivePage() {
                     <div
                       key={c.id}
                       onClick={() => handleOpenAccount(c)}
-                      className="py-3 px-2 flex items-center justify-between hover:bg-alegra-sand-light/40 rounded-lg cursor-pointer transition-colors"
+                      className="py-3 px-2 flex items-center justify-between hover:bg-surface-container-low rounded-xl cursor-pointer transition-colors"
                     >
                       <div>
-                        <h4 className="text-sm font-semibold text-alegra-navy">
+                        <h4 className="text-xs font-bold text-primary">
                           {c.fullName}
                         </h4>
-                        <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
-                          {c.tiktokUsername && <span>{c.tiktokUsername}</span>}
+                        <div className="flex items-center gap-2 text-[10px] text-on-surface-variant mt-0.5">
+                          {c.tiktokUsername && <span>@{c.tiktokUsername}</span>}
                           <span>• Tel: {c.phonePrimary}</span>
                           <span>• {c.municipality.name}</span>
                         </div>
                       </div>
-                      <span className="text-xs font-semibold text-alegra-sand-dark bg-alegra-sand/20 px-2.5 py-1 rounded-md">
+                      <span className="text-[10px] font-bold text-primary bg-secondary-fixed px-2.5 py-1 rounded-lg">
                         Seleccionar
                       </span>
                     </div>

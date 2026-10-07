@@ -188,8 +188,8 @@ export async function getFirestorePackageById(id: string): Promise<any | null> {
   const products = productsSnap.docs.map((d) => {
     const pData = d.data();
     return {
-      id: d.id,
       ...pData,
+      id: d.id,
       photos: typeof pData.photos === "string" ? pData.photos : JSON.stringify(pData.photos || []),
       createdAt: pData.createdAt?.toDate ? pData.createdAt.toDate().toISOString() : pData.createdAt,
     };
@@ -324,8 +324,8 @@ export async function searchFirestoreProducts(query?: string, barcode?: string):
     const data = doc.data();
     return [
       {
-        id: doc.id,
         ...data,
+        id: doc.id,
         photos: typeof data.photos === "string" ? data.photos : JSON.stringify(data.photos || []),
         package: { code: data.packageCode || "PKG", packageType: "lote" },
       },
@@ -336,8 +336,8 @@ export async function searchFirestoreProducts(query?: string, barcode?: string):
   let results: any[] = snap.docs.map((d) => {
     const data = d.data();
     return {
-      id: d.id,
       ...data,
+      id: d.id,
       photos: typeof data.photos === "string" ? data.photos : JSON.stringify(data.photos || []),
       package: { code: data.packageCode || "PKG", packageType: "lote" },
     };
@@ -509,11 +509,72 @@ export async function getFirestoreOrders(statusFilter?: string): Promise<any[]> 
   });
 }
 
+// -----------------------------------------------------------
+// RESOLUTORES INTELIGENTES DE REFERENCIAS (PRODUCTO Y CLIENTE)
+// -----------------------------------------------------------
+export async function resolveCustomerDocRef(customerId: string | number) {
+  if (!adminDb) throw new Error("Firestore no configurado");
+  const rawId = String(customerId ?? "").trim();
+  if (!rawId) throw new Error("ID de cliente requerido");
+
+  // 1. Probar directamente (ej: ID de documento generado por Firestore)
+  const directRef = adminDb.collection("customers").doc(rawId);
+  const directSnap = await directRef.get();
+  if (directSnap.exists) return directRef;
+
+  // 2. Probar con prefijo "cust_" (para datos migrados)
+  if (!rawId.startsWith("cust_")) {
+    const prefixedRef = adminDb.collection("customers").doc(`cust_${rawId}`);
+    const prefixedSnap = await prefixedRef.get();
+    if (prefixedSnap.exists) return prefixedRef;
+  }
+
+  // 3. Buscar por campo id numérico
+  const numId = Number(rawId);
+  if (!isNaN(numId)) {
+    const byIdSnap = await adminDb.collection("customers").where("id", "==", numId).limit(1).get();
+    if (!byIdSnap.empty) return byIdSnap.docs[0].ref;
+  }
+
+  throw new Error(`El cliente con identificador '${rawId}' no existe en el sistema`);
+}
+
+export async function resolveProductDocRef(productId: string | number) {
+  if (!adminDb) throw new Error("Firestore no configurado");
+  const rawId = String(productId ?? "").trim();
+  if (!rawId) throw new Error("ID de producto inválido o vacío");
+
+  // 1. Probar directamente con rawId (ej: "prod_6" o auto-id de Firestore)
+  const directRef = adminDb.collection("products").doc(rawId);
+  const directSnap = await directRef.get();
+  if (directSnap.exists) return directRef;
+
+  // 2. Probar con prefijo "prod_" (para IDs migrados de MySQL ej: 6 -> prod_6)
+  if (!rawId.startsWith("prod_")) {
+    const prefixedRef = adminDb.collection("products").doc(`prod_${rawId}`);
+    const prefixedSnap = await prefixedRef.get();
+    if (prefixedSnap.exists) return prefixedRef;
+  }
+
+  // 3. Buscar por campo numérico id
+  const numId = Number(rawId);
+  if (!isNaN(numId)) {
+    const byIdSnap = await adminDb.collection("products").where("id", "==", numId).limit(1).get();
+    if (!byIdSnap.empty) return byIdSnap.docs[0].ref;
+  }
+
+  // 4. Buscar por código de barras
+  const byBarcodeSnap = await adminDb.collection("products").where("barcode", "==", rawId).limit(1).get();
+  if (!byBarcodeSnap.empty) return byBarcodeSnap.docs[0].ref;
+
+  throw new Error(`El producto con identificador '${rawId}' no existe en el inventario`);
+}
+
 export async function createFirestoreOrder(orderData: {
-  customerId: string;
+  customerId: string | number;
   notes?: string;
   items: Array<{
-    productId: string;
+    productId: string | number;
     originalPrice: number;
     discountAmount: number;
     finalPrice: number;
@@ -521,14 +582,19 @@ export async function createFirestoreOrder(orderData: {
 }): Promise<any> {
   if (!adminDb) throw new Error("Firestore no configurado");
 
+  // Resolver referencias documentales antes de iniciar la transacción
+  const custRef = await resolveCustomerDocRef(orderData.customerId);
+  const productRefs = await Promise.all(
+    orderData.items.map((i) => resolveProductDocRef(i.productId))
+  );
+
   return await adminDb.runTransaction(async (tx) => {
-    // 1. Obtener cliente
-    const custDoc = await tx.get(adminDb.collection("customers").doc(orderData.customerId));
+    // 1. Obtener cliente dentro de la transacción
+    const custDoc = await tx.get(custRef);
     if (!custDoc.exists) throw new Error("Cliente no encontrado");
     const cust = custDoc.data()!;
 
     // 2. Validar que cada producto esté 'disponible'
-    const productRefs = orderData.items.map((i) => adminDb.collection("products").doc(i.productId));
     const prodDocs = await Promise.all(productRefs.map((ref) => tx.get(ref)));
 
     const validatedItems: any[] = [];
@@ -574,7 +640,7 @@ export async function createFirestoreOrder(orderData: {
     const newOrderRef = adminDb.collection("orders").doc();
     const orderPayload = {
       orderNumber,
-      customerId: orderData.customerId,
+      customerId: custRef.id,
       customer: {
         fullName: cust.fullName,
         phonePrimary: cust.phonePrimary,
@@ -624,13 +690,26 @@ export async function addFirestoreOrderPayment(
 ): Promise<any> {
   if (!adminDb) throw new Error("Firestore no configurado");
 
-  return await adminDb.runTransaction(async (tx) => {
-    const orderRef = adminDb.collection("orders").doc(orderId);
-    const orderDoc = await tx.get(orderRef);
-    if (!orderDoc.exists) throw new Error("Orden no encontrada");
+  const orderRef = adminDb.collection("orders").doc(String(orderId));
+  const orderDoc = await orderRef.get();
+  if (!orderDoc.exists) throw new Error("Orden no encontrada");
+  const order = orderDoc.data()!;
+  if (order.status === "cancelado") throw new Error("No se pueden registrar pagos en una orden cancelada");
 
-    const order = orderDoc.data()!;
-    if (order.status === "cancelado") throw new Error("No se pueden registrar pagos en una orden cancelada");
+  const productRefs: any[] = [];
+  for (const item of order.items || []) {
+    try {
+      const pRef = await resolveProductDocRef(item.productId);
+      productRefs.push(pRef);
+    } catch (e) {
+      console.warn(`No se pudo resolver producto ${item.productId}:`, e);
+    }
+  }
+
+  return await adminDb.runTransaction(async (tx) => {
+    const oDoc = await tx.get(orderRef);
+    if (!oDoc.exists) throw new Error("Orden no encontrada");
+    const oData = oDoc.data()!;
 
     const newPayment = {
       id: `pay_${Date.now()}`,
@@ -641,17 +720,17 @@ export async function addFirestoreOrderPayment(
       notes: paymentData.notes?.trim() || null,
     };
 
-    const currentPayments = order.payments || [];
+    const currentPayments = oData.payments || [];
     const updatedPayments = [...currentPayments, newPayment];
-    const totalPaid = updatedPayments.reduce((acc: number, p: any) => acc + Number(p.amount), 0);
-    const shouldMarkPaid = paymentData.markAsPaid || totalPaid >= Number(order.totalAmount);
+    const totalPaid = updatedPayments.reduce((acc: number, p: any) => acc + Number(p.amount || 0), 0);
+    const shouldMarkPaid = paymentData.markAsPaid || totalPaid >= Number(oData.totalAmount || 0);
 
     const updatePayload: any = {
       payments: updatedPayments,
       updatedAt: FieldValue.serverTimestamp(),
     };
 
-    if (shouldMarkPaid && order.status === "pendiente_pago") {
+    if (shouldMarkPaid && oData.status === "pendiente_pago") {
       updatePayload.status = "pagado";
     }
 
@@ -659,9 +738,8 @@ export async function addFirestoreOrderPayment(
 
     // Si pasa a pagado, actualizar productos a 'vendido'
     if (shouldMarkPaid) {
-      for (const item of order.items || []) {
-        const prodRef = adminDb.collection("products").doc(item.productId);
-        tx.update(prodRef, { status: "vendido", updatedAt: FieldValue.serverTimestamp() });
+      for (const pRef of productRefs) {
+        tx.update(pRef, { status: "vendido", updatedAt: FieldValue.serverTimestamp() });
       }
     }
 
@@ -673,13 +751,31 @@ export async function addFirestoreOrderPayment(
 export async function cancelFirestoreOrder(orderId: string): Promise<any> {
   if (!adminDb) throw new Error("Firestore no configurado");
 
-  return await adminDb.runTransaction(async (tx) => {
-    const orderRef = adminDb.collection("orders").doc(orderId);
-    const orderDoc = await tx.get(orderRef);
-    if (!orderDoc.exists) throw new Error("Orden no encontrada");
+  const orderRef = adminDb.collection("orders").doc(String(orderId));
+  const orderDoc = await orderRef.get();
+  if (!orderDoc.exists) throw new Error("Orden no encontrada");
 
-    const order = orderDoc.data()!;
-    if (["enviado", "entregado"].includes(order.status)) {
+  const order = orderDoc.data()!;
+  if (["enviado", "entregado"].includes(order.status)) {
+    throw new Error("No se puede cancelar una orden ya enviada o entregada");
+  }
+
+  const productRefs: any[] = [];
+  for (const item of order.items || []) {
+    try {
+      const pRef = await resolveProductDocRef(item.productId);
+      productRefs.push(pRef);
+    } catch (e) {
+      console.warn(`No se pudo resolver producto ${item.productId}:`, e);
+    }
+  }
+
+  return await adminDb.runTransaction(async (tx) => {
+    const oDoc = await tx.get(orderRef);
+    if (!oDoc.exists) throw new Error("Orden no encontrada");
+    const oData = oDoc.data()!;
+
+    if (["enviado", "entregado"].includes(oData.status)) {
       throw new Error("No se puede cancelar una orden ya enviada o entregada");
     }
 
@@ -689,9 +785,8 @@ export async function cancelFirestoreOrder(orderId: string): Promise<any> {
     });
 
     // Liberar productos a disponible
-    for (const item of order.items || []) {
-      const prodRef = adminDb.collection("products").doc(item.productId);
-      tx.update(prodRef, { status: "disponible", updatedAt: FieldValue.serverTimestamp() });
+    for (const pRef of productRefs) {
+      tx.update(pRef, { status: "disponible", updatedAt: FieldValue.serverTimestamp() });
     }
 
     return { id: orderId, status: "cancelado" };
@@ -701,12 +796,13 @@ export async function cancelFirestoreOrder(orderId: string): Promise<any> {
 // Agregar producto a orden existente
 export async function addFirestoreOrderItem(
   orderId: string,
-  itemData: { productId: string; discountAmount?: number }
+  itemData: { productId: string | number; discountAmount?: number }
 ): Promise<any> {
   if (!adminDb) throw new Error("Firestore no configurado");
+  const prodRef = await resolveProductDocRef(itemData.productId);
 
   return await adminDb.runTransaction(async (tx) => {
-    const orderRef = adminDb.collection("orders").doc(orderId);
+    const orderRef = adminDb.collection("orders").doc(String(orderId));
     const orderDoc = await tx.get(orderRef);
     if (!orderDoc.exists) throw new Error("Orden no encontrada");
     const order = orderDoc.data()!;
@@ -715,7 +811,6 @@ export async function addFirestoreOrderItem(
       throw new Error(`No se pueden agregar productos en estado '${order.status}'`);
     }
 
-    const prodRef = adminDb.collection("products").doc(itemData.productId);
     const prodDoc = await tx.get(prodRef);
     if (!prodDoc.exists) throw new Error("Producto no encontrado");
     const prod = prodDoc.data()!;
@@ -765,7 +860,7 @@ export async function addFirestoreOrderItem(
 // Actualizar estado de orden
 export async function updateFirestoreOrderStatus(orderId: string, nextStatus: string): Promise<any> {
   if (!adminDb) throw new Error("Firestore no configurado");
-  const orderRef = adminDb.collection("orders").doc(orderId);
+  const orderRef = adminDb.collection("orders").doc(String(orderId));
   const orderDoc = await orderRef.get();
   if (!orderDoc.exists) throw new Error("Orden no encontrada");
 
@@ -778,13 +873,21 @@ export async function updateFirestoreOrderStatus(orderId: string, nextStatus: st
   // Si pasa a pagado, enviado o entregado, confirmar que los productos estén en vendido
   if (["pagado", "enviado", "entregado"].includes(nextStatus)) {
     for (const item of order.items || []) {
-      const prodRef = adminDb.collection("products").doc(item.productId);
-      await prodRef.update({ status: "vendido", updatedAt: FieldValue.serverTimestamp() });
+      try {
+        const prodRef = await resolveProductDocRef(item.productId);
+        await prodRef.update({ status: "vendido", updatedAt: FieldValue.serverTimestamp() });
+      } catch (e) {
+        console.warn(`No se pudo actualizar estado de producto ${item.productId}:`, e);
+      }
     }
   } else if (nextStatus === "cancelado") {
     for (const item of order.items || []) {
-      const prodRef = adminDb.collection("products").doc(item.productId);
-      await prodRef.update({ status: "disponible", updatedAt: FieldValue.serverTimestamp() });
+      try {
+        const prodRef = await resolveProductDocRef(item.productId);
+        await prodRef.update({ status: "disponible", updatedAt: FieldValue.serverTimestamp() });
+      } catch (e) {
+        console.warn(`No se pudo actualizar estado de producto ${item.productId}:`, e);
+      }
     }
   }
 

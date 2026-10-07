@@ -1,24 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { 
-  ClipboardList, 
-  CheckCircle2, 
-  Clock, 
-  Truck, 
-  PackageCheck, 
-  XCircle, 
-  Plus, 
-  CreditCard, 
-  Printer, 
-  MessageCircle, 
-  Search, 
-  AlertCircle,
-  Phone,
-  MapPin,
-  ChevronDown,
-  ChevronUp
-} from "lucide-react";
+import { useEffect, useState, useMemo } from "react";
+import Link from "next/link";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 interface OrderItem {
@@ -78,8 +61,10 @@ interface AvailableProduct {
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState("pendiente_pago");
+  const [statusFilter, setStatusFilter] = useState("todos");
   const [searchQuery, setSearchQuery] = useState("");
+  const [carrierFilter, setCarrierFilter] = useState("");
+  const [bankFilter, setBankFilter] = useState("");
 
   // Modales
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -90,6 +75,7 @@ export default function OrdersPage() {
   // Formulario Pago
   const [paymentRef, setPaymentRef] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("transferencia");
+  const [bankDestination, setBankDestination] = useState("bi");
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentNotes, setPaymentNotes] = useState("");
   const [submittingPayment, setSubmittingPayment] = useState(false);
@@ -134,18 +120,64 @@ export default function OrdersPage() {
     }
   };
 
+  // Métricas dinámicas calculadas
+  const metrics = useMemo(() => {
+    let pendingAmount = 0;
+    let pendingCount = 0;
+    let paidAmount = 0;
+    let paidTransfers = 0;
+    let readyToShipCount = 0;
+    let inTransitCount = 0;
+    let deliveredCount = 0;
+    let cancelledCount = 0;
+
+    orders.forEach((o) => {
+      if (o.status === "pendiente_pago" || o.balanceDue > 0) {
+        pendingAmount += Number(o.balanceDue || 0);
+        pendingCount += 1;
+      }
+      if (o.status === "pagado") {
+        readyToShipCount += 1;
+      }
+      if (o.status === "enviado") {
+        inTransitCount += 1;
+      }
+      if (o.status === "entregado") {
+        deliveredCount += 1;
+      }
+      if (o.status === "cancelado") {
+        cancelledCount += 1;
+      }
+      paidAmount += Number(o.totalPaid || 0);
+      paidTransfers += o.payments?.length || 0;
+    });
+
+    return {
+      pendingAmount,
+      pendingCount,
+      paidAmount,
+      paidTransfers,
+      readyToShipCount,
+      inTransitCount,
+      deliveredCount,
+      cancelledCount,
+      totalOrders: orders.length,
+    };
+  }, [orders]);
+
   // Abrir modal de pago
   const handleOpenPaymentModal = (order: Order) => {
     setSelectedOrder(order);
     setPaymentRef("");
     setPaymentMethod("transferencia");
+    setBankDestination("bi");
     setPaymentAmount(order.balanceDue > 0 ? String(order.balanceDue) : "");
     setPaymentNotes("");
     setActionError("");
     setIsPaymentModalOpen(true);
   };
 
-  // Registrar Pago (Soporta múltiples referencias y transiciona a Pagado)
+  // Registrar Pago
   const handleSubmitPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOrder) return;
@@ -154,6 +186,10 @@ export default function OrdersPage() {
     setActionError("");
 
     try {
+      const combinedNotes = bankDestination
+        ? `[${bankDestination.toUpperCase()}] ${paymentNotes}`.trim()
+        : paymentNotes;
+
       const res = await fetch(`/api/orders/${selectedOrder.id}/payments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -161,7 +197,7 @@ export default function OrdersPage() {
           referenceNumber: paymentRef,
           paymentMethod,
           amount: parseFloat(paymentAmount),
-          notes: paymentNotes,
+          notes: combinedNotes,
           markAsPaid: true,
         }),
       });
@@ -225,7 +261,7 @@ export default function OrdersPage() {
   // Cancelar orden (libera stock a disponible)
   const handleCancelOrder = async (orderId: number) => {
     const confirm = window.confirm(
-      "¿Estás seguro de cancelar esta orden? Los productos apartados se liberarán de inmediato y volverán a estar disponibles."
+      "¿Estás seguro de cancelar esta orden? Los productos apartados se liberarán de inmediato y volverán a estar disponibles en stock."
     );
     if (!confirm) return;
 
@@ -281,125 +317,343 @@ export default function OrdersPage() {
     switch (status) {
       case "pendiente_pago":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-            <Clock className="w-3 h-3" />
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary-fixed/50 text-secondary font-label-caps text-xs font-bold uppercase tracking-wider">
+            <span className="material-symbols-outlined text-sm">schedule</span>
             Pendiente de Pago
           </span>
         );
       case "pagado":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
-            <CheckCircle2 className="w-3 h-3" />
-            Pagado
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 font-label-caps text-xs font-bold uppercase tracking-wider">
+            <span className="material-symbols-outlined text-sm">check_circle</span>
+            Pagado • Listo para Despacho
           </span>
         );
       case "enviado":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold rounded-full bg-blue-50 text-blue-800 border border-blue-200">
-            <Truck className="w-3 h-3" />
-            Enviado (En Ruta)
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-100 text-blue-800 font-label-caps text-xs font-bold uppercase tracking-wider">
+            <span className="material-symbols-outlined text-sm">local_shipping</span>
+            Enviado • En Ruta
           </span>
         );
       case "entregado":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold rounded-full bg-teal-50 text-teal-800 border border-teal-200">
-            <PackageCheck className="w-3 h-3" />
-            Entregado (Venta Concluida)
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-100 text-teal-800 font-label-caps text-xs font-bold uppercase tracking-wider">
+            <span className="material-symbols-outlined text-sm">package_2</span>
+            Entregado (Concluido)
           </span>
         );
       case "cancelado":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold rounded-full bg-red-50 text-red-800 border border-red-200">
-            <XCircle className="w-3 h-3" />
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-error-container text-on-error-container font-label-caps text-xs font-bold uppercase tracking-wider">
+            <span className="material-symbols-outlined text-sm">cancel</span>
             Cancelado
           </span>
         );
       default:
-        return <span>{status}</span>;
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container-high text-primary font-label-caps text-xs font-bold">
+            {status}
+          </span>
+        );
     }
   };
 
-  // Filtrar por texto
-  const filteredOrders = orders.filter((o) => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      o.orderNumber.toLowerCase().includes(q) ||
-      o.customer.fullName.toLowerCase().includes(q) ||
-      o.customer.phonePrimary.toLowerCase().includes(q)
-    );
-  });
+  // Filtrar por texto y selectores
+  const filteredOrders = useMemo(() => {
+    return orders.filter((o) => {
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const matchesQuery =
+          o.orderNumber.toLowerCase().includes(q) ||
+          o.customer?.fullName?.toLowerCase().includes(q) ||
+          o.customer?.phonePrimary?.toLowerCase().includes(q) ||
+          o.customer?.tiktokUsername?.toLowerCase().includes(q) ||
+          o.customer?.instagramUsername?.toLowerCase().includes(q) ||
+          o.payments?.some((p) => p.referenceNumber.toLowerCase().includes(q));
+        if (!matchesQuery) return false;
+      }
+      if (carrierFilter) {
+        const addr = (o.customer?.fullAddress || "").toLowerCase();
+        if (!addr.includes(carrierFilter.toLowerCase())) return false;
+      }
+      if (bankFilter) {
+        const hasBank = o.payments?.some((p) =>
+          (p.notes || "").toLowerCase().includes(bankFilter.toLowerCase())
+        );
+        if (!hasBank) return false;
+      }
+      return true;
+    });
+  }, [orders, searchQuery, carrierFilter, bankFilter]);
+
+  const cleanPhone = (phone: string) => phone.replace(/\D/g, "");
 
   return (
-    <div className="space-y-6">
-      {/* Encabezado */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-alegra-border">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-alegra-navy">
-            Panel de Pedidos, Cobranza y Despacho
+    <div className="flex flex-col gap-6">
+      {/* 1. Encabezado Principal y Acciones Operativas */}
+      <section className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="flex flex-col gap-1 max-w-3xl">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="px-2.5 py-1 rounded-full bg-primary/10 text-primary font-label-caps text-xs tracking-wider font-bold">
+              DESPACHO &amp; COBRANZA EN VIVO
+            </span>
+            <span className="flex items-center gap-1.5 text-outline text-xs">
+              <span className="inline-block w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+              Sync GTQ: BI / Banrural / Guatex Activo
+            </span>
+          </div>
+          <h1 className="font-headline-xl text-2xl lg:text-3xl font-extrabold text-primary tracking-tight">
+            Gestión de Pedidos, Cobranza y Despacho
           </h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Monitorea comandas pendientes, registra múltiples referencias de pago y gestiona envíos.
+          <p className="text-sm text-outline leading-relaxed">
+            Monitoreo del ciclo de vida de compras Live, validación de transferencias bancarias
+            guatemaltecas (BI/Banrural) y despacho sincronizado con paqueterías nacionales.
           </p>
         </div>
-      </div>
+        <div className="flex items-center gap-3 flex-wrap self-start lg:self-center">
+          <button
+            onClick={() => window.print()}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container-lowest text-primary font-semibold text-xs shadow-sm hover:bg-surface-container-low transition-all border border-surface-container-high"
+            type="button"
+          >
+            <span className="material-symbols-outlined text-secondary text-base">picture_as_pdf</span>
+            <span>Imprimir / Exportar Manifiesto</span>
+          </button>
+          <Link
+            href="/pos"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-on-primary font-bold text-xs uppercase tracking-wider shadow-md hover:bg-primary/90 transition-all active:scale-95"
+          >
+            <span className="material-symbols-outlined text-secondary-fixed text-base">
+              add_shopping_cart
+            </span>
+            <span>+ Ir a POS Live</span>
+          </Link>
+        </div>
+      </section>
 
-      {/* Pestañas de Filtro por Estado */}
-      <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-3">
-        {[
-          { key: "pendiente_pago", label: "Pendientes de Pago", icon: Clock },
-          { key: "pagado", label: "Pagados", icon: CheckCircle2 },
-          { key: "enviado", label: "Enviados", icon: Truck },
-          { key: "entregado", label: "Entregados", icon: PackageCheck },
-          { key: "cancelado", label: "Cancelados", icon: XCircle },
-          { key: "todos", label: "Todas las Órdenes", icon: ClipboardList },
-        ].map((tab) => {
-          const Icon = tab.icon;
-          const isActive = statusFilter === tab.key;
-          return (
-            <button
-              key={tab.key}
-              onClick={() => setStatusFilter(tab.key)}
-              className={`flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg border transition-all ${
-                isActive
-                  ? "bg-alegra-navy text-white border-alegra-navy shadow-xs"
-                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-              }`}
+      {/* 2. Tarjetas de Métricas y KPIs de Flujo de Caja y Despacho */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        {/* KPI 1: Pendiente por Cobrar */}
+        <div className="p-4 rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col justify-between relative overflow-hidden border border-surface-container-high">
+          <div className="absolute top-0 left-0 w-1.5 h-full bg-secondary"></div>
+          <div className="flex items-start justify-between">
+            <div className="flex flex-col">
+              <span className="text-xs text-outline font-medium">Total por Cobrar (Pendiente)</span>
+              <span className="font-financial-lg text-2xl font-bold text-primary mt-1">
+                {formatCurrency(metrics.pendingAmount)}
+              </span>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-secondary-fixed/40 flex items-center justify-center text-secondary">
+              <span className="material-symbols-outlined">pending_actions</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 mt-3 text-secondary text-xs font-semibold">
+            <span className="material-symbols-outlined text-sm">schedule</span>
+            <span>{metrics.pendingCount} órdenes a la espera de boleta</span>
+          </div>
+        </div>
+
+        {/* KPI 2: Cobrado Hoy */}
+        <div className="p-4 rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col justify-between relative overflow-hidden border border-surface-container-high">
+          <div className="absolute top-0 left-0 w-1.5 h-full bg-primary"></div>
+          <div className="flex items-start justify-between">
+            <div className="flex flex-col">
+              <span className="text-xs text-outline font-medium">Cobrado Registrado</span>
+              <span className="font-financial-lg text-2xl font-bold text-primary mt-1">
+                {formatCurrency(metrics.paidAmount)}
+              </span>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-primary-fixed/40 flex items-center justify-center text-primary">
+              <span className="material-symbols-outlined">price_check</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 mt-3 text-primary text-xs font-semibold">
+            <span className="material-symbols-outlined text-sm">verified</span>
+            <span>+{metrics.paidTransfers} transferencias y pagos</span>
+          </div>
+        </div>
+
+        {/* KPI 3: Listos para Despacho */}
+        <div className="p-4 rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col justify-between relative overflow-hidden border border-surface-container-high">
+          <div className="absolute top-0 left-0 w-1.5 h-full bg-secondary-container"></div>
+          <div className="flex items-start justify-between">
+            <div className="flex flex-col">
+              <span className="text-xs text-outline font-medium">Listos para Despacho</span>
+              <span className="font-financial-lg text-2xl font-bold text-primary mt-1">
+                {metrics.readyToShipCount} pedidos
+              </span>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-secondary-container flex items-center justify-center text-secondary">
+              <span className="material-symbols-outlined">inventory_2</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 mt-3 text-outline text-xs">
+            <span className="material-symbols-outlined text-sm">local_shipping</span>
+            <span>Guatex, Forza y Moto Express</span>
+          </div>
+        </div>
+
+        {/* KPI 4: En Tránsito / Ruta */}
+        <div className="p-4 rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col justify-between relative overflow-hidden border border-surface-container-high">
+          <div className="absolute top-0 left-0 w-1.5 h-full bg-primary-container"></div>
+          <div className="flex items-start justify-between">
+            <div className="flex flex-col">
+              <span className="text-xs text-outline font-medium">En Tránsito / Ruta Nacional</span>
+              <span className="font-financial-lg text-2xl font-bold text-primary mt-1">
+                {metrics.inTransitCount} envíos
+              </span>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-primary-fixed flex items-center justify-center text-primary">
+              <span className="material-symbols-outlined">route</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 mt-3 text-outline text-xs">
+            <span className="material-symbols-outlined text-sm">hub</span>
+            <span>Guías con tracking en tiempo real</span>
+          </div>
+        </div>
+      </section>
+
+      {/* 3. Pipeline Tabs & Barra de Filtros Multifuncional */}
+      <section className="flex flex-col gap-4">
+        {/* Tabs de Estado */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-surface-container-high scrollbar-none">
+          {[
+            { key: "todos", label: "Todos los Pedidos", count: metrics.totalOrders, icon: "list_alt" },
+            {
+              key: "pendiente_pago",
+              label: "⏳ Pendientes de Pago",
+              count: metrics.pendingCount,
+              icon: "schedule",
+            },
+            {
+              key: "pagado",
+              label: "✅ Pagados",
+              count: metrics.readyToShipCount,
+              icon: "check_circle",
+            },
+            {
+              key: "enviado",
+              label: "🚚 Enviados / En Ruta",
+              count: metrics.inTransitCount,
+              icon: "local_shipping",
+            },
+            {
+              key: "entregado",
+              label: "📦 Entregados",
+              count: metrics.deliveredCount,
+              icon: "package_2",
+            },
+            {
+              key: "cancelado",
+              label: "❌ Cancelados",
+              count: metrics.cancelledCount,
+              icon: "cancel",
+            },
+          ].map((tab) => {
+            const isActive = statusFilter === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setStatusFilter(tab.key)}
+                className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold tracking-wider uppercase transition-all whitespace-nowrap ${
+                  isActive
+                    ? "bg-primary text-on-primary shadow-sm"
+                    : "text-outline hover:bg-surface-container-low hover:text-primary"
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    isActive
+                      ? "bg-secondary text-primary"
+                      : "bg-surface-container-high text-outline"
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Filtros y Búsqueda Rápida */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+          {/* Buscador Universal */}
+          <div className="md:col-span-6 lg:col-span-6 relative">
+            <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-outline">
+              search
+            </span>
+            <input
+              type="text"
+              placeholder="Buscar por # Orden (CMD-XXXX), cliente, @tiktok, teléfono o No. Boleta..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full h-11 pl-11 pr-4 rounded-xl bg-surface-container-lowest text-primary text-sm placeholder:text-outline border border-surface-container-high focus:outline-hidden focus:ring-2 focus:ring-secondary/50 shadow-xs"
+            />
+          </div>
+
+          {/* Filtro Paquetería */}
+          <div className="md:col-span-3 lg:col-span-3 relative">
+            <select
+              value={carrierFilter}
+              onChange={(e) => setCarrierFilter(e.target.value)}
+              className="w-full h-11 pl-3.5 pr-8 rounded-xl bg-surface-container-lowest text-primary text-xs font-semibold border border-surface-container-high appearance-none focus:outline-hidden focus:ring-2 focus:ring-secondary/50 shadow-xs cursor-pointer"
             >
-              <Icon className="w-3.5 h-3.5" />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
+              <option value="">Paquetería: Todas</option>
+              <option value="guatex">Guatex (Nacional)</option>
+              <option value="forza">Forza Delivery Express</option>
+              <option value="cargo">Cargo Expreso</option>
+              <option value="moto">Mensajería Capitalina (Moto)</option>
+            </select>
+            <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-outline pointer-events-none text-base">
+              expand_more
+            </span>
+          </div>
 
-      {/* Buscador */}
-      <div className="relative">
-        <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-        <input
-          type="text"
-          placeholder="Buscar orden por folio CMD-XXXX, nombre del cliente o teléfono..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-hidden focus:border-alegra-navy"
-        />
-      </div>
+          {/* Filtro Banco Receptor */}
+          <div className="md:col-span-3 lg:col-span-3 relative">
+            <select
+              value={bankFilter}
+              onChange={(e) => setBankFilter(e.target.value)}
+              className="w-full h-11 pl-3.5 pr-8 rounded-xl bg-surface-container-lowest text-primary text-xs font-semibold border border-surface-container-high appearance-none focus:outline-hidden focus:ring-2 focus:ring-secondary/50 shadow-xs cursor-pointer"
+            >
+              <option value="">Banco Receptor: Todos</option>
+              <option value="bi">Banco Industrial (BI)</option>
+              <option value="banrural">Banrural</option>
+              <option value="bac">BAC Credomatic</option>
+              <option value="gyt">G&amp;T Continental</option>
+            </select>
+            <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-outline pointer-events-none text-base">
+              expand_more
+            </span>
+          </div>
+        </div>
+      </section>
 
-      {/* Listado de Pedidos */}
+      {/* 4. Lista Principal de Órdenes */}
       {loading ? (
-        <div className="flex justify-center items-center py-20 text-gray-400">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-alegra-navy"></div>
+        <div className="flex flex-col items-center justify-center py-24 gap-3 bg-surface-container-lowest rounded-2xl border border-surface-container-high">
+          <span className="material-symbols-outlined text-4xl text-secondary animate-spin">
+            progress_activity
+          </span>
+          <p className="text-sm font-semibold text-outline">Cargando pedidos y cobranza...</p>
         </div>
       ) : filteredOrders.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-xl border border-alegra-border p-8">
-          <ClipboardList className="w-12 h-12 text-alegra-sand mx-auto mb-3" />
-          <h3 className="text-base font-semibold text-alegra-navy">No hay pedidos en este estado</h3>
-          <p className="text-sm text-gray-500 mt-1">
-            Los pedidos finalizados en el POS Live se listarán aquí para registro de pago y seguimiento.
+        <div className="text-center py-16 bg-surface-container-lowest rounded-2xl border border-surface-container-high p-8 shadow-sm">
+          <span className="material-symbols-outlined text-5xl text-secondary/60 mb-2">
+            receipt_long
+          </span>
+          <h3 className="text-base font-bold text-primary">No hay pedidos en este estado</h3>
+          <p className="text-sm text-outline mt-1 max-w-md mx-auto">
+            Los pedidos apartados desde el POS Live se sincronizan automáticamente aquí para
+            validar boletas bancarias y gestionar su entrega.
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <section className="flex flex-col gap-4">
           {filteredOrders.map((order) => {
             const canAddItems = ["pendiente_pago", "pagado"].includes(order.status);
             const canCancel = order.status === "pendiente_pago";
@@ -407,188 +661,298 @@ export default function OrdersPage() {
             const canShip = order.status === "pagado";
             const canDeliver = ["pagado", "enviado"].includes(order.status);
 
+            const phoneDigits = cleanPhone(order.customer?.phonePrimary || "");
+            const initials = (order.customer?.fullName || "Cliente")
+              .split(" ")
+              .slice(0, 2)
+              .map((n) => n[0])
+              .join("")
+              .toUpperCase();
+
             return (
-              <div
+              <article
                 key={order.id}
-                className="bg-white rounded-xl border border-alegra-border p-5 shadow-xs hover:border-gray-300 transition-all space-y-4"
+                className="p-5 rounded-2xl bg-surface-container-lowest border border-surface-container-high shadow-xs hover:shadow-md transition-shadow flex flex-col gap-4"
               >
-                {/* Cabecera de la Orden */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-gray-100">
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono font-bold text-sm text-alegra-navy bg-gray-100 px-2.5 py-1 rounded">
+                {/* Top Bar de la Orden */}
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-surface-container-high">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {getStatusBadge(order.status)}
+                    <span className="font-mono text-base font-extrabold text-primary">
                       {order.orderNumber}
                     </span>
-                    {getStatusBadge(order.status)}
-                    <span className="text-xs text-gray-400">
-                      {formatDate(order.createdAt)}
+                    <span className="text-outline text-xs flex items-center gap-1">
+                      <span className="material-symbols-outlined text-sm">live_tv</span>
+                      Apartado en Live • {formatDate(order.createdAt)}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500">Total:</span>
-                    <span className="text-lg font-bold text-alegra-navy">
-                      {formatCurrency(order.totalAmount)}
-                    </span>
+                  {/* Acciones Rápidas con Comprador */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {phoneDigits && (
+                      <a
+                        href={`https://wa.me/502${phoneDigits}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-on-primary text-xs font-semibold hover:bg-primary/90 transition-all shadow-xs"
+                      >
+                        <span className="material-symbols-outlined text-sm text-secondary-fixed">
+                          chat
+                        </span>
+                        <span>+502 {order.customer.phonePrimary} WhatsApp</span>
+                      </a>
+                    )}
+                    <button
+                      onClick={() => handleViewReceipt(order)}
+                      type="button"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-surface-container-low text-primary text-xs font-semibold hover:bg-surface-container-high transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-sm text-secondary">
+                        print
+                      </span>
+                      <span>Recibo Térmico</span>
+                    </button>
                   </div>
                 </div>
 
-                {/* Datos del Cliente y Ubicación */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-gray-600 bg-alegra-bg p-3 rounded-lg border border-gray-100">
-                  <div>
-                    <span className="font-semibold text-alegra-navy block text-sm">
-                      {order.customer.fullName}
-                    </span>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="flex items-center gap-1 font-medium">
-                        <Phone className="w-3 h-3 text-gray-400" />
-                        {order.customer.phonePrimary}
-                      </span>
-                      {order.customer.tiktokUsername && (
-                        <span>• TikTok: {order.customer.tiktokUsername}</span>
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="flex items-start gap-1">
-                      <MapPin className="w-3.5 h-3.5 text-alegra-sand-dark shrink-0 mt-0.5" />
-                      <span>
-                        {order.customer.fullAddress}, {order.customer.municipality.name}, {order.customer.department.name}
-                      </span>
-                    </span>
-                  </div>
-                </div>
-
-                {/* Detalle de Artículos */}
-                <div className="border border-gray-100 rounded-lg overflow-hidden">
-                  <div className="bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 flex justify-between">
-                    <span>Prendas en la Orden ({order.items.length})</span>
-                    <span>Subtotal / Descuento / Final</span>
-                  </div>
-                  <div className="divide-y divide-gray-100 text-xs">
-                    {order.items.map((item) => (
-                      <div key={item.id} className="p-3 flex justify-between items-center">
-                        <div>
-                          <span className="font-semibold text-alegra-navy block">
-                            {item.product.name}
-                          </span>
-                          <span className="font-mono text-[11px] text-gray-400">
-                            {item.product.barcode} • Estado: {item.product.status}
-                          </span>
-                        </div>
-                        <div className="text-right">
-                          <span className="font-bold text-alegra-navy block">
-                            {formatCurrency(item.finalPrice)}
-                          </span>
-                          {Number(item.discountAmount) > 0 && (
-                            <span className="text-[10px] text-red-500 block">
-                              Base: {formatCurrency(item.originalPrice)} (-{formatCurrency(item.discountAmount)})
+                {/* Grid de 3 Columnas: Cliente & Destino | Prendas | Estado Financiero */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                  {/* Columna 1: Cliente y Destino (4 cols) */}
+                  <div className="lg:col-span-4 flex flex-col gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-secondary/15 flex items-center justify-center font-extrabold text-secondary text-sm shrink-0">
+                        {initials}
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-semibold text-primary text-sm truncate">
+                          {order.customer.fullName}
+                        </span>
+                        <div className="flex items-center gap-2 text-xs text-outline">
+                          {order.customer.tiktokUsername && (
+                            <span className="text-secondary font-medium truncate">
+                              @{order.customer.tiktokUsername.replace(/^@/, "")}
+                            </span>
+                          )}
+                          {order.customer.instagramUsername && (
+                            <span className="truncate">
+                              IG: @{order.customer.instagramUsername.replace(/^@/, "")}
                             </span>
                           )}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
+                    </div>
 
-                {/* Sección de Pagos y Referencias Registradas */}
-                <div className="bg-gray-50/70 p-3 rounded-lg border border-gray-200/60 space-y-2">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="font-bold text-alegra-navy flex items-center gap-1.5">
-                      <CreditCard className="w-3.5 h-3.5 text-alegra-sand-dark" />
-                      Referencias de Pago Registradas ({order.payments.length})
-                    </span>
-                    <div className="space-x-3">
-                      <span>Pagado: <b className="text-emerald-700">{formatCurrency(order.totalPaid)}</b></span>
-                      {order.balanceDue > 0 && (
-                        <span>Saldo Pendiente: <b className="text-amber-700">{formatCurrency(order.balanceDue)}</b></span>
-                      )}
+                    {/* Dirección de Entrega */}
+                    <div className="p-3 rounded-xl bg-surface-container-low flex flex-col gap-1 text-xs text-outline">
+                      <div className="flex items-center gap-1.5 font-semibold text-primary">
+                        <span className="material-symbols-outlined text-sm text-secondary">
+                          pin_drop
+                        </span>
+                        <span>Destino de Despacho:</span>
+                      </div>
+                      <p className="pl-5 text-primary font-medium leading-relaxed">
+                        {order.customer.fullAddress}
+                      </p>
+                      <p className="pl-5 text-outline">
+                        {order.customer.municipality?.name}, {order.customer.department?.name}
+                      </p>
+                    </div>
+
+                    {/* Cuentas Bancarias Sugeridas */}
+                    <div className="p-3 rounded-xl bg-surface-container-low flex flex-col gap-1 text-xs text-outline">
+                      <span className="font-semibold text-primary">Cuentas compartidas al cliente:</span>
+                      <div className="flex justify-between items-center text-[11px]">
+                        <span>Banco Industrial (Monetaria):</span>
+                        <span className="font-mono text-primary font-bold">014-049182-3</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[11px]">
+                        <span>Banrural (Ahorro / Monetaria):</span>
+                        <span className="font-mono text-primary font-bold">304-001928-1</span>
+                      </div>
                     </div>
                   </div>
 
-                  {order.payments.length === 0 ? (
-                    <p className="text-xs text-gray-400 italic">
-                      No se han registrado boletas ni transferencias aún.
-                    </p>
-                  ) : (
-                    <div className="space-y-1.5 pt-1">
-                      {order.payments.map((p) => (
+                  {/* Columna 2: Prendas Apartadas (5 cols) */}
+                  <div className="lg:col-span-5 flex flex-col gap-2">
+                    <div className="flex items-center justify-between text-xs font-semibold text-primary">
+                      <span>Prendas Apartadas ({order.items.length})</span>
+                      <span className="text-outline">Total Items: {order.items.length}</span>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto pr-1">
+                      {order.items.map((item) => (
                         <div
-                          key={p.id}
-                          className="flex items-center justify-between text-xs bg-white px-2.5 py-1.5 rounded border border-gray-200"
+                          key={item.id}
+                          className="flex items-center justify-between p-2.5 rounded-xl bg-surface-container-low text-xs border border-surface-container-high/60"
                         >
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold capitalize text-alegra-navy">
-                              {p.paymentMethod}:
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="w-6 h-6 rounded-lg bg-surface-container-highest text-primary font-mono text-[11px] flex items-center justify-center font-bold shrink-0">
+                              1x
                             </span>
-                            <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-[11px] font-bold">
-                              Ref: {p.referenceNumber}
-                            </span>
-                            {p.notes && <span className="text-gray-400 italic">({p.notes})</span>}
+                            <div className="min-w-0">
+                              <span className="text-primary font-medium block truncate">
+                                {item.product.name}
+                              </span>
+                              <span className="text-outline text-[11px] font-mono">
+                                {item.product.barcode}
+                              </span>
+                            </div>
                           </div>
-                          <span className="font-bold text-emerald-700">
-                            +{formatCurrency(p.amount)}
-                          </span>
+                          <div className="text-right shrink-0">
+                            <span className="font-bold text-primary block">
+                              {formatCurrency(item.finalPrice)}
+                            </span>
+                            {Number(item.discountAmount) > 0 && (
+                              <span className="text-[10px] text-error font-semibold">
+                                -{formatCurrency(item.discountAmount)} desc.
+                              </span>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
-                  )}
+
+                    {/* Historial de Boletas Verificadas */}
+                    {order.payments && order.payments.length > 0 && (
+                      <div className="mt-1 p-2.5 rounded-xl bg-surface-container-low border border-surface-container-high flex flex-col gap-1">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-primary flex items-center gap-1">
+                          <span className="material-symbols-outlined text-xs text-secondary">
+                            verified
+                          </span>
+                          Boletas Registradas ({order.payments.length})
+                        </span>
+                        <div className="flex flex-col gap-1">
+                          {order.payments.map((p) => (
+                            <div
+                              key={p.id}
+                              className="flex items-center justify-between text-xs bg-surface-container-lowest px-2.5 py-1 rounded-lg border border-surface-container-high/70"
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold uppercase text-[10px] text-secondary">
+                                  {p.paymentMethod}:
+                                </span>
+                                <span className="font-mono font-bold text-primary text-[11px]">
+                                  {p.referenceNumber}
+                                </span>
+                                {p.notes && (
+                                  <span className="text-outline text-[10px] truncate max-w-[120px]">
+                                    ({p.notes})
+                                  </span>
+                                )}
+                              </div>
+                              <span className="font-bold text-emerald-700">
+                                +{formatCurrency(p.amount)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Columna 3: Estado Financiero & Liquidación (3 cols) */}
+                  <div className="lg:col-span-3 flex flex-col justify-between p-3.5 rounded-2xl bg-surface-container-low border border-surface-container-high">
+                    <div className="flex flex-col gap-1.5 text-xs text-outline">
+                      <div className="flex justify-between">
+                        <span>Subtotal prendas:</span>
+                        <span className="font-semibold text-primary">
+                          {formatCurrency(order.subtotal)}
+                        </span>
+                      </div>
+                      {Number(order.totalDiscount) > 0 && (
+                        <div className="flex justify-between text-error font-medium">
+                          <span>Descuentos aplicados:</span>
+                          <span>-{formatCurrency(order.totalDiscount)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-primary font-bold pt-1 border-t border-surface-container-high text-sm">
+                        <span>Total Pedido:</span>
+                        <span className="font-financial-md text-base">
+                          {formatCurrency(order.totalAmount)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-emerald-700 font-medium">
+                        <span>Total Pagado:</span>
+                        <span className="font-bold">{formatCurrency(order.totalPaid)}</span>
+                      </div>
+                    </div>
+
+                    {/* Caja de Saldo Pendiente o Confirmado */}
+                    {order.balanceDue > 0 ? (
+                      <div className="mt-3 p-3 rounded-xl bg-secondary-fixed/40 border border-secondary/20 flex flex-col items-center justify-center text-center">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-secondary">
+                          Saldo Pendiente por Validar
+                        </span>
+                        <span className="font-financial-lg text-xl font-black text-secondary mt-0.5">
+                          {formatCurrency(order.balanceDue)}
+                        </span>
+                        <span className="text-[10px] text-outline mt-0.5">
+                          {order.payments.length === 0
+                            ? "Sin boletas registradas"
+                            : "Pago parcial registrado"}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="mt-3 p-3 rounded-xl bg-surface-container-lowest border border-emerald-300/40 flex items-center gap-2 justify-center shadow-xs">
+                        <span className="material-symbols-outlined text-emerald-600 text-2xl">
+                          task_alt
+                        </span>
+                        <div className="flex flex-col text-left">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+                            Pago 100% Confirmado
+                          </span>
+                          <span className="text-[11px] text-outline">Paz y salvo para despacho</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {/* Barra de Acciones de la Orden */}
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-gray-100">
-                  <div className="flex flex-wrap gap-2">
-                    {/* Botón Ver / Imprimir Recibo */}
-                    <button
-                      onClick={() => handleViewReceipt(order)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                    >
-                      <Printer className="w-3.5 h-3.5" />
-                      Recibo
-                    </button>
+                {/* Footer: Acciones Operativas de la Orden */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-surface-container-high">
+                  <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+                    {/* Botón Registrar Boleta / Pago */}
+                    {canPay && (
+                      <button
+                        onClick={() => handleOpenPaymentModal(order)}
+                        type="button"
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-primary text-on-primary text-xs font-bold uppercase tracking-wider shadow-sm hover:bg-primary/90 transition-all active:scale-95"
+                      >
+                        <span className="material-symbols-outlined text-sm text-secondary-fixed">
+                          receipt_long
+                        </span>
+                        <span>+ Registrar Boleta / Pago</span>
+                      </button>
+                    )}
 
-                    {/* Botón Agregar Prenda (Permitido antes de Enviado/Entregado) */}
+                    {/* Botón Agregar Prenda Extra */}
                     {canAddItems && (
                       <button
                         onClick={() => handleOpenAddProductModal(order)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-alegra-navy bg-alegra-sand-light hover:bg-alegra-sand/30 rounded-lg transition-colors border border-alegra-sand/30"
+                        type="button"
+                        className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-surface-container text-primary text-xs font-semibold hover:bg-surface-container-high transition-colors"
+                        title="Agregar Prenda Extra del Live"
                       >
-                        <Plus className="w-3.5 h-3.5" />
-                        Agregar Prenda
+                        <span className="material-symbols-outlined text-sm text-secondary">
+                          add_circle
+                        </span>
+                        <span>+ Prenda Extra</span>
                       </button>
                     )}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
-                    {/* Cancelar Cuenta (Solo si está en pendiente_pago) */}
-                    {canCancel && (
-                      <button
-                        onClick={() => handleCancelOrder(order.id)}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors"
-                      >
-                        <XCircle className="w-3.5 h-3.5" />
-                        Cancelar Cuenta
-                      </button>
-                    )}
-
-                    {/* Registrar Pago (Pasar a Pagado con Referencia) */}
-                    {canPay && (
-                      <button
-                        onClick={() => handleOpenPaymentModal(order)}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg shadow-xs transition-colors"
-                      >
-                        <CreditCard className="w-3.5 h-3.5" />
-                        Registrar Referencia de Pago
-                      </button>
-                    )}
-
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
                     {/* Pasar a Enviado */}
                     {canShip && (
                       <button
                         onClick={() => handleUpdateStatus(order.id, "enviado")}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-700 hover:bg-blue-800 rounded-lg shadow-xs transition-colors"
+                        type="button"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary-container text-on-primary text-xs font-bold uppercase tracking-wider shadow-md hover:bg-primary transition-all active:scale-95"
                       >
-                        <Truck className="w-3.5 h-3.5" />
-                        Pasar a Enviado
+                        <span className="material-symbols-outlined text-sm text-secondary-fixed">
+                          local_shipping
+                        </span>
+                        <span>🚚 Marcar como Enviado</span>
                       </button>
                     )}
 
@@ -596,32 +960,50 @@ export default function OrdersPage() {
                     {canDeliver && (
                       <button
                         onClick={() => handleUpdateStatus(order.id, "entregado")}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-teal-700 hover:bg-teal-800 rounded-lg shadow-xs transition-colors"
+                        type="button"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 text-white text-xs font-bold uppercase tracking-wider shadow-md hover:bg-emerald-800 transition-all active:scale-95"
                       >
-                        <PackageCheck className="w-3.5 h-3.5" />
-                        Marcar como Entregado
+                        <span className="material-symbols-outlined text-sm">task_alt</span>
+                        <span>📦 Marcar como Entregado</span>
+                      </button>
+                    )}
+
+                    {/* Cancelar Cuenta (Solo en pendiente_pago) */}
+                    {canCancel && (
+                      <button
+                        onClick={() => handleCancelOrder(order.id)}
+                        type="button"
+                        className="px-3 py-2 rounded-xl text-error text-xs font-bold hover:bg-error-container/30 transition-colors uppercase tracking-wider"
+                      >
+                        Cancelar y Liberar Stock
                       </button>
                     )}
                   </div>
                 </div>
-              </div>
+              </article>
             );
           })}
-        </div>
+        </section>
       )}
 
-      {/* Modal Registrar Pago con Referencia Bancaria */}
+      {/* ================= MODALES ================= */}
+
+      {/* Modal 1: Registrar Boleta con Banco y Referencia */}
       {isPaymentModalOpen && selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-alegra-border overflow-hidden">
-            <div className="bg-alegra-navy p-5 text-white flex justify-between items-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-surface-container-lowest rounded-2xl max-w-md w-full shadow-2xl border border-surface-container-high overflow-hidden animate-in fade-in-50 zoom-in-95">
+            <div className="bg-primary p-5 text-on-primary flex justify-between items-center">
               <div>
-                <h3 className="font-bold text-base">Registrar Referencia de Pago</h3>
-                <p className="text-xs text-alegra-sand">Comanda {selectedOrder.orderNumber}</p>
+                <h3 className="font-headline-md text-base font-bold text-on-primary">
+                  Validar y Registrar Boleta de Pago
+                </h3>
+                <p className="text-xs text-secondary-fixed">
+                  Orden {selectedOrder.orderNumber} • {selectedOrder.customer.fullName}
+                </p>
               </div>
               <button
                 onClick={() => setIsPaymentModalOpen(false)}
-                className="text-gray-300 hover:text-white text-xl"
+                className="text-on-primary-container hover:text-on-primary text-xl font-bold"
               >
                 ✕
               </button>
@@ -629,107 +1011,142 @@ export default function OrdersPage() {
 
             <form onSubmit={handleSubmitPayment} className="p-6 space-y-4">
               {actionError && (
-                <div className="p-3 text-xs bg-red-50 text-red-700 border border-red-200 rounded-lg">
+                <div className="p-3 text-xs bg-error-container text-on-error-container border border-error/20 rounded-xl font-medium">
                   {actionError}
                 </div>
               )}
 
-              <div className="bg-gray-50 p-3 rounded-lg text-xs space-y-1">
-                <div className="flex justify-between">
-                  <span>Cliente:</span>
-                  <span className="font-semibold">{selectedOrder.customer.fullName}</span>
+              {/* Resumen de la Orden */}
+              <div className="bg-surface-container-low p-3 rounded-xl text-xs space-y-1.5 border border-surface-container-high">
+                <div className="flex justify-between text-outline">
+                  <span>Total de la Orden:</span>
+                  <span className="font-bold text-primary">
+                    {formatCurrency(selectedOrder.totalAmount)}
+                  </span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Total Orden:</span>
-                  <span className="font-bold">{formatCurrency(selectedOrder.totalAmount)}</span>
+                <div className="flex justify-between text-outline">
+                  <span>Ya Pagado a la Fecha:</span>
+                  <span className="font-semibold text-emerald-700">
+                    {formatCurrency(selectedOrder.totalPaid)}
+                  </span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between text-secondary font-bold pt-1 border-t border-surface-container-high">
                   <span>Saldo Pendiente:</span>
-                  <span className="font-bold text-amber-700">
+                  <span className="font-financial-sm text-sm">
                     {formatCurrency(selectedOrder.balanceDue)}
                   </span>
                 </div>
               </div>
 
+              {/* Banco Receptor y Método */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1.5">
+                    Banco Receptor *
+                  </label>
+                  <select
+                    value={bankDestination}
+                    onChange={(e) => setBankDestination(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-surface-container-low border border-surface-container-high text-primary rounded-xl focus:ring-2 focus:ring-secondary/50 focus:border-secondary outline-hidden transition-all cursor-pointer font-medium"
+                  >
+                    <option value="bi">Banco Industrial (BI)</option>
+                    <option value="banrural">Banrural</option>
+                    <option value="bac">BAC Credomatic</option>
+                    <option value="gyt">G&amp;T Continental</option>
+                    <option value="efectivo">Efectivo / Contra Entrega</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1.5">
+                    Forma de Pago
+                  </label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-surface-container-low border border-surface-container-high text-primary rounded-xl focus:ring-2 focus:ring-secondary/50 focus:border-secondary outline-hidden transition-all cursor-pointer font-medium"
+                  >
+                    <option value="transferencia">Transferencia Móvil</option>
+                    <option value="deposito">Boleta Depósito Físico</option>
+                    <option value="tarjeta">Link de Tarjeta</option>
+                    <option value="efectivo">Efectivo</option>
+                    <option value="otro">Otro</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* No. de Boleta / Referencia */}
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Número de Referencia / Boleta / Autorización *
+                <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1.5">
+                  No. de Boleta / Transferencia / Autorización *
                 </label>
                 <input
                   type="text"
                   required
                   autoFocus
-                  placeholder="Ej. TRANSF-891023 o No. Boleta 48291"
+                  placeholder="Ej. TRANSF-7821903 o Boleta 48291"
                   value={paymentRef}
                   onChange={(e) => setPaymentRef(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:border-alegra-navy font-mono"
+                  className="w-full px-3.5 py-2.5 text-sm bg-surface-container-low border border-surface-container-high text-primary rounded-xl font-mono focus:ring-2 focus:ring-secondary/50 focus:border-secondary outline-hidden transition-all placeholder:text-outline"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Método de Pago
-                  </label>
-                  <select
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:border-alegra-navy bg-white"
-                  >
-                    <option value="transferencia">Transferencia</option>
-                    <option value="deposito">Depósito Bancario</option>
-                    <option value="efectivo">Efectivo</option>
-                    <option value="otro">Otro</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Monto Pagado (Q) *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    required
-                    value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:border-alegra-navy"
-                  />
-                </div>
+              {/* Monto */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1.5">
+                  Monto Verificado en Cuenta (Q) *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  required
+                  placeholder="Ej. 615.00"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  className="w-full px-3.5 py-2.5 text-sm bg-surface-container-low border border-surface-container-high text-primary rounded-xl focus:ring-2 focus:ring-secondary/50 focus:border-secondary outline-hidden transition-all font-bold"
+                />
               </div>
 
+              {/* Notas */}
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Notas Adicionales (Opcional)
+                <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1.5">
+                  Notas de Verificación (Opcional)
                 </label>
                 <input
                   type="text"
-                  placeholder="Ej. Banco Industrial / Banrural..."
+                  placeholder="Ej. Verificado en BancaSAT / Enviaron captura por WhatsApp"
                   value={paymentNotes}
                   onChange={(e) => setPaymentNotes(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:border-alegra-navy"
+                  className="w-full px-3.5 py-2.5 text-sm bg-surface-container-low border border-surface-container-high text-primary rounded-xl focus:ring-2 focus:ring-secondary/50 focus:border-secondary outline-hidden transition-all placeholder:text-outline"
                 />
               </div>
 
-              <div className="p-3 bg-emerald-50 text-emerald-800 text-xs rounded-lg border border-emerald-200">
-                Al confirmar el pago, la orden pasará a <b>Pagado</b> y los productos se retirarán permanentemente del inventario disponible.
+              <div className="p-3 bg-secondary-fixed/30 text-secondary text-xs rounded-xl border border-secondary/20 flex items-start gap-2">
+                <span className="material-symbols-outlined text-sm mt-0.5">verified_user</span>
+                <span>
+                  Al registrar el pago total, la orden pasará a <b>Pagado (Listo para Despacho)</b>{" "}
+                  y se reservará la guía de envío nacional.
+                </span>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-3 pt-3 border-t border-surface-container-high">
                 <button
                   type="button"
                   onClick={() => setIsPaymentModalOpen(false)}
-                  className="px-4 py-2 text-xs font-medium text-gray-600 hover:text-gray-800"
+                  className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-outline hover:text-primary transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={submittingPayment}
-                  className="px-5 py-2 text-xs font-semibold bg-emerald-700 text-white rounded-lg hover:bg-emerald-800 disabled:opacity-50 transition-colors shadow-xs"
+                  className="px-6 py-2.5 text-xs font-bold uppercase tracking-wider bg-primary text-on-primary rounded-xl hover:bg-primary/90 transition-all shadow-sm active:scale-95 disabled:opacity-50 flex items-center gap-2"
                 >
-                  {submittingPayment ? "Registrando..." : "Confirmar y Pasar a Pagado"}
+                  {submittingPayment && (
+                    <span className="material-symbols-outlined text-sm animate-spin">sync</span>
+                  )}
+                  {submittingPayment ? "Registrando Boleta..." : "Confirmar y Liquidar"}
                 </button>
               </div>
             </form>
@@ -737,18 +1154,22 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {/* Modal Agregar Producto Adicional a Orden */}
+      {/* Modal 2: Agregar Prenda Extra del Live */}
       {isAddProductModalOpen && selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-alegra-border overflow-hidden">
-            <div className="bg-alegra-navy p-5 text-white flex justify-between items-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-surface-container-lowest rounded-2xl max-w-md w-full shadow-2xl border border-surface-container-high overflow-hidden animate-in fade-in-50 zoom-in-95">
+            <div className="bg-primary p-5 text-on-primary flex justify-between items-center">
               <div>
-                <h3 className="font-bold text-base">Agregar Prenda Adicional</h3>
-                <p className="text-xs text-alegra-sand">Comanda {selectedOrder.orderNumber}</p>
+                <h3 className="font-headline-md text-base font-bold text-on-primary">
+                  Agregar Prenda Adicional
+                </h3>
+                <p className="text-xs text-secondary-fixed">
+                  Comanda {selectedOrder.orderNumber} • {selectedOrder.customer.fullName}
+                </p>
               </div>
               <button
                 onClick={() => setIsAddProductModalOpen(false)}
-                className="text-gray-300 hover:text-white text-xl"
+                className="text-on-primary-container hover:text-on-primary text-xl font-bold"
               >
                 ✕
               </button>
@@ -756,20 +1177,20 @@ export default function OrdersPage() {
 
             <form onSubmit={handleSubmitAddProduct} className="p-6 space-y-4">
               {actionError && (
-                <div className="p-3 text-xs bg-red-50 text-red-700 border border-red-200 rounded-lg">
+                <div className="p-3 text-xs bg-error-container text-on-error-container border border-error/20 rounded-xl font-medium">
                   {actionError}
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Seleccionar Prenda Disponible *
+                <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1.5">
+                  Seleccionar Prenda Disponible en Stock *
                 </label>
                 <select
                   required
                   value={selectedProductId}
                   onChange={(e) => setSelectedProductId(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:border-alegra-navy bg-white"
+                  className="w-full px-3.5 py-2.5 text-sm bg-surface-container-low border border-surface-container-high text-primary rounded-xl focus:ring-2 focus:ring-secondary/50 focus:border-secondary outline-hidden transition-all cursor-pointer"
                 >
                   <option value="">Selecciona una prenda disponible...</option>
                   {availableProducts.map((p) => (
@@ -781,33 +1202,36 @@ export default function OrdersPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1.5">
                   Descuento por Monto (Q) (Opcional)
                 </label>
                 <input
                   type="number"
                   step="1"
                   min="0"
-                  placeholder="0"
+                  placeholder="0.00"
                   value={addItemDiscount}
                   onChange={(e) => setAddItemDiscount(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:border-alegra-navy"
+                  className="w-full px-3.5 py-2.5 text-sm bg-surface-container-low border border-surface-container-high text-primary rounded-xl focus:ring-2 focus:ring-secondary/50 focus:border-secondary outline-hidden transition-all placeholder:text-outline"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-3 pt-3 border-t border-surface-container-high">
                 <button
                   type="button"
                   onClick={() => setIsAddProductModalOpen(false)}
-                  className="px-4 py-2 text-xs font-medium text-gray-600 hover:text-gray-800"
+                  className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-outline hover:text-primary transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={submittingAddProduct || !selectedProductId}
-                  className="px-5 py-2 text-xs font-semibold bg-alegra-navy text-white rounded-lg hover:bg-alegra-navy-light disabled:opacity-50 transition-colors shadow-xs"
+                  className="px-6 py-2.5 text-xs font-bold uppercase tracking-wider bg-secondary text-primary rounded-xl hover:bg-secondary/90 transition-all shadow-sm active:scale-95 disabled:opacity-50 flex items-center gap-2"
                 >
+                  {submittingAddProduct && (
+                    <span className="material-symbols-outlined text-sm animate-spin">sync</span>
+                  )}
                   {submittingAddProduct ? "Agregando..." : "Agregar a la Orden"}
                 </button>
               </div>
@@ -816,56 +1240,71 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {/* Modal Recibo */}
+      {/* Modal 3: Recibo Térmico y Comprobante */}
       {isReceiptModalOpen && selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-alegra-border overflow-hidden my-6">
-            <div className="bg-alegra-navy p-4 text-white flex justify-between items-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-surface-container-lowest rounded-2xl max-w-md w-full shadow-2xl border border-surface-container-high overflow-hidden my-6">
+            <div className="bg-primary p-4 text-on-primary flex justify-between items-center">
               <div>
-                <h3 className="font-bold text-base">Comprobante / Recibo</h3>
-                <p className="text-xs text-alegra-sand">{selectedOrder.orderNumber}</p>
+                <h3 className="font-bold text-base text-on-primary">Comprobante de Venta</h3>
+                <p className="text-xs text-secondary-fixed">{selectedOrder.orderNumber}</p>
               </div>
               <button
                 onClick={() => setIsReceiptModalOpen(false)}
-                className="text-gray-300 hover:text-white"
+                className="text-on-primary-container hover:text-on-primary text-xl font-bold"
               >
                 ✕
               </button>
             </div>
 
-            <div id="printable-receipt" className="p-6 text-sm text-gray-800 space-y-4">
-              <div className="text-center border-b border-gray-200 pb-3">
-                <h2 className="text-lg font-black tracking-widest text-alegra-navy">ALEGRA</h2>
-                <p className="text-xs text-gray-500">Comprobante de Venta</p>
-                <p className="text-xs font-mono font-bold text-alegra-navy mt-1">
+            <div id="printable-receipt" className="p-6 text-sm text-primary space-y-4">
+              <div className="text-center border-b border-surface-container-high pb-3">
+                <h2 className="text-lg font-black tracking-widest text-primary">ALEGRA</h2>
+                <p className="text-xs text-outline">Live Shopping &amp; Boutique</p>
+                <p className="text-xs font-mono font-bold text-primary mt-1">
                   {selectedOrder.orderNumber}
                 </p>
               </div>
 
-              <div className="text-xs space-y-1">
-                <p><b>Cliente:</b> {selectedOrder.customer.fullName}</p>
-                <p><b>Teléfono:</b> {selectedOrder.customer.phonePrimary}</p>
-                <p><b>Ubicación:</b> {selectedOrder.customer.fullAddress}, {selectedOrder.customer.municipality.name}, {selectedOrder.customer.department.name}</p>
-                <p><b>Estado Actual:</b> <span className="uppercase font-bold">{selectedOrder.status}</span></p>
+              <div className="text-xs space-y-1 text-outline">
+                <p>
+                  <b className="text-primary">Cliente:</b> {selectedOrder.customer.fullName}
+                </p>
+                <p>
+                  <b className="text-primary">Teléfono:</b> {selectedOrder.customer.phonePrimary}
+                </p>
+                <p>
+                  <b className="text-primary">Destino:</b> {selectedOrder.customer.fullAddress},{" "}
+                  {selectedOrder.customer.municipality?.name},{" "}
+                  {selectedOrder.customer.department?.name}
+                </p>
+                <p>
+                  <b className="text-primary">Estado:</b>{" "}
+                  <span className="uppercase font-bold text-secondary">
+                    {selectedOrder.status.replace("_", " ")}
+                  </span>
+                </p>
               </div>
 
-              <div className="border-t border-b border-gray-200 py-2">
+              <div className="border-t border-b border-surface-container-high py-2">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="text-left text-gray-400 border-b border-gray-100">
-                      <th className="pb-1">Prenda</th>
-                      <th className="pb-1 text-center">Desc.</th>
-                      <th className="pb-1 text-right">Total</th>
+                    <tr className="text-left text-outline border-b border-surface-container-high">
+                      <th className="pb-1 font-bold uppercase">Prenda</th>
+                      <th className="pb-1 text-center font-bold uppercase">Desc.</th>
+                      <th className="pb-1 text-right font-bold uppercase">Total</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50">
+                  <tbody className="divide-y divide-surface-container-high">
                     {selectedOrder.items.map((item) => (
                       <tr key={item.id} className="py-1">
-                        <td className="py-1 font-medium">{item.product.name}</td>
-                        <td className="py-1 text-center text-red-500">
-                          {Number(item.discountAmount) > 0 ? `-${formatCurrency(item.discountAmount)}` : "-"}
+                        <td className="py-1.5 font-medium">{item.product.name}</td>
+                        <td className="py-1.5 text-center text-error">
+                          {Number(item.discountAmount) > 0
+                            ? `-${formatCurrency(item.discountAmount)}`
+                            : "-"}
                         </td>
-                        <td className="py-1 text-right font-bold">
+                        <td className="py-1.5 text-right font-bold">
                           {formatCurrency(item.finalPrice)}
                         </td>
                       </tr>
@@ -875,26 +1314,26 @@ export default function OrdersPage() {
               </div>
 
               <div className="space-y-1 text-xs">
-                <div className="flex justify-between">
+                <div className="flex justify-between text-outline">
                   <span>Subtotal:</span>
                   <span>{formatCurrency(selectedOrder.subtotal)}</span>
                 </div>
                 {Number(selectedOrder.totalDiscount) > 0 && (
-                  <div className="flex justify-between text-red-600">
+                  <div className="flex justify-between text-error font-medium">
                     <span>Descuento:</span>
                     <span>-{formatCurrency(selectedOrder.totalDiscount)}</span>
                   </div>
                 )}
-                <div className="flex justify-between font-bold text-base text-alegra-navy pt-1 border-t border-gray-200">
+                <div className="flex justify-between font-bold text-base text-primary pt-1 border-t border-surface-container-high">
                   <span>TOTAL:</span>
                   <span>{formatCurrency(selectedOrder.totalAmount)}</span>
                 </div>
-                <div className="flex justify-between text-emerald-700">
+                <div className="flex justify-between text-emerald-700 font-semibold">
                   <span>Total Pagado:</span>
-                  <span className="font-semibold">{formatCurrency(selectedOrder.totalPaid)}</span>
+                  <span>{formatCurrency(selectedOrder.totalPaid)}</span>
                 </div>
                 {selectedOrder.balanceDue > 0 && (
-                  <div className="flex justify-between text-amber-700 font-bold">
+                  <div className="flex justify-between text-secondary font-bold">
                     <span>Saldo Pendiente:</span>
                     <span>{formatCurrency(selectedOrder.balanceDue)}</span>
                   </div>
@@ -902,12 +1341,14 @@ export default function OrdersPage() {
               </div>
             </div>
 
-            <div className="p-4 bg-gray-50 border-t border-gray-200 flex flex-col gap-2">
+            <div className="p-4 bg-surface-container-low border-t border-surface-container-high flex flex-col gap-2">
               <button
                 onClick={() => window.print()}
-                className="w-full py-2 px-4 bg-alegra-navy hover:bg-alegra-navy-light text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2"
+                className="w-full py-2.5 px-4 bg-primary hover:bg-primary/90 text-on-primary font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm"
               >
-                <Printer className="w-4 h-4" />
+                <span className="material-symbols-outlined text-sm text-secondary-fixed">
+                  print
+                </span>
                 <span>Imprimir Recibo Térmico</span>
               </button>
             </div>

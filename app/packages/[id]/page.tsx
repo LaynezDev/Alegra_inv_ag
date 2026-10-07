@@ -386,88 +386,133 @@ export default function PackageDetailPage() {
   return (
     <div className="space-y-6">
       {/* Botón Volver y Encabezado */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 pb-2 border-b border-surface-container-high">
         <Link
           href="/packages"
-          className="p-2 text-gray-500 hover:text-alegra-navy hover:bg-white rounded-lg transition-colors border border-transparent hover:border-gray-200"
+          className="p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container-low rounded-xl transition-colors border border-surface-container-high"
         >
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-alegra-navy">
+            <h1 className="text-xl sm:text-2xl font-bold font-display text-primary">
               Paquete {pkg.code}
             </h1>
-            <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-alegra-sand/20 text-alegra-navy border border-alegra-sand uppercase">
+            <span className="px-2.5 py-0.5 text-xs font-bold rounded-full bg-secondary-fixed text-on-secondary-fixed border border-secondary/20 uppercase">
               {pkg.packageType}
             </span>
           </div>
-          <p className="text-xs text-gray-500 flex items-center gap-3 mt-0.5">
-            <span className="flex items-center gap-1">
-              <Receipt className="w-3.5 h-3.5" /> Factura: <b>{pkg.invoiceNumber}</b>
+          <p className="text-xs text-on-surface-variant flex items-center gap-3 mt-0.5">
+            <span className="flex items-center gap-1 font-mono">
+              <Receipt className="w-3.5 h-3.5 text-secondary" /> Factura: <b>{pkg.invoiceNumber}</b>
             </span>
             <span>•</span>
             <span className="flex items-center gap-1">
-              <Scale className="w-3.5 h-3.5" /> Peso: <b>{formatWeight(pkg.totalWeight)}</b>
+              <Scale className="w-3.5 h-3.5 text-secondary" /> Peso: <b>{formatWeight(pkg.totalWeight)}</b>
             </span>
           </p>
         </div>
       </div>
 
-      {/* Tarjeta de Resumen Financiero del Paquete */}
-      <div className="bg-white rounded-xl border border-alegra-border p-5 shadow-xs grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div>
-          <span className="text-xs text-gray-400 block">Costo Invertido</span>
-          <span className="text-lg font-bold text-alegra-navy">
+      {/* Tarjetas KPI de Resumen Financiero del Paquete */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="p-4 bg-surface-container-lowest rounded-2xl shadow-xs border border-surface-container-high flex flex-col justify-between">
+          <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Costo Invertido</span>
+          <span className="text-lg sm:text-xl font-bold font-display text-primary mt-1">
             {formatCurrency(pkg.costPrice)}
           </span>
+          <span className="text-[11px] text-on-surface-variant mt-0.5">Costo total de adquisición</span>
         </div>
-        <div>
-          <span className="text-xs text-gray-400 block">Total Vendido</span>
-          <span className="text-lg font-bold text-emerald-600">
+
+        <div className="p-4 bg-surface-container-lowest rounded-2xl shadow-xs border border-surface-container-high flex flex-col justify-between">
+          <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Total Vendido</span>
+          <span className="text-lg sm:text-xl font-bold font-display text-emerald-700 mt-1">
             {formatCurrency(pkg.totalSold)}
           </span>
+          <span className="text-[11px] text-emerald-700 font-semibold mt-0.5">
+            {pkg.recoveryPercent}% Recuperado
+          </span>
         </div>
-        <div>
-          <span className="text-xs text-gray-400 block">Estado de Recuperación</span>
-          <div className="flex items-center gap-2 mt-0.5">
+
+        <div className="p-4 bg-surface-container-lowest rounded-2xl shadow-xs border border-surface-container-high flex flex-col justify-between">
+          <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Estado Financiero</span>
+          <div className="mt-1">
             {pkg.isRecovered ? (
-              <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                ¡Recuperado! (+{formatCurrency(pkg.profit)})
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                ¡Superávit! (+{formatCurrency(pkg.profit)})
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                <Clock className="w-3.5 h-3.5" />
-                {pkg.recoveryPercent}% Recuperado
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
+                <Clock className="w-3.5 h-3.5 text-amber-600" />
+                Faltan {formatCurrency(Math.max(0, pkg.costPrice - pkg.totalSold))}
               </span>
             )}
           </div>
+          <span className="text-[11px] text-on-surface-variant mt-0.5">Punto de equilibrio</span>
         </div>
-        <div className="flex sm:justify-end items-center">
-          <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-alegra-navy text-white text-xs font-semibold rounded-lg hover:bg-alegra-navy-light transition-colors shadow-xs"
-          >
-            <Plus className="w-4 h-4 text-alegra-sand" />
-            {showAddForm ? "Cerrar Formulario" : "Desglosar Prenda"}
-          </button>
+
+        <div className="p-4 bg-surface-container-lowest rounded-2xl shadow-xs border border-surface-container-high flex flex-col justify-between">
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Censo de Prendas</span>
+            <button
+              onClick={() => setShowAddForm(!showAddForm)}
+              className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary-container hover:bg-primary text-on-primary text-[10px] font-bold rounded-lg transition-all shadow-xs"
+            >
+              <Plus className="w-3 h-3 text-secondary-fixed" />
+              <span>{showAddForm ? "Cerrar" : "+ Prenda"}</span>
+            </button>
+          </div>
+          <span className="text-lg sm:text-xl font-bold font-display text-primary mt-1">
+            {pkg.products.length} <span className="text-xs font-normal text-on-surface-variant">Totales</span>
+          </span>
+          <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant mt-0.5">
+            <span className="text-emerald-700 font-bold">{pkg.products.filter(p => p.status === 'disponible').length} disp</span> •
+            <span className="text-amber-700 font-bold">{pkg.products.filter(p => p.status === 'apartado').length} apart</span> •
+            <span className="text-blue-700 font-bold">{pkg.products.filter(p => p.status === 'vendido').length} vend</span>
+          </div>
         </div>
       </div>
 
-      {/* Formulario Desplegable para Agregar Producto con Subida de Archivos */}
+      {/* Barra Visual de Breakeven */}
+      <div className="p-4 bg-surface-container-lowest rounded-2xl shadow-xs border border-surface-container-high space-y-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-on-surface-variant gap-1">
+          <span className="font-bold text-primary flex items-center gap-1.5">
+            <Sparkles className="w-4 h-4 text-secondary" />
+            <span>Progreso hacia Punto de Equilibrio (Breakeven)</span>
+          </span>
+          <span className="font-medium">
+            {pkg.isRecovered ? "¡Inversión 100% Recuperada!" : `${pkg.recoveryPercent}% completado`}
+          </span>
+        </div>
+        <div className="relative w-full h-3 bg-surface-container rounded-full overflow-hidden flex">
+          <div
+            className={`h-full transition-all rounded-full ${
+              pkg.isRecovered ? "bg-emerald-600" : "bg-primary-container"
+            }`}
+            style={{ width: `${Math.min(pkg.recoveryPercent, 100)}%` }}
+          />
+        </div>
+        <div className="flex justify-between text-[10px] text-on-surface-variant font-mono font-medium">
+          <span>Q 0.00</span>
+          <span className="text-primary font-bold">Inversión: {formatCurrency(pkg.costPrice)}</span>
+          <span>Vendido: {formatCurrency(pkg.totalSold)}</span>
+        </div>
+      </div>
+
+      {/* Formulario para Agregar Producto con Subida de Archivos */}
       {showAddForm && (
-        <div className="bg-white rounded-xl border-2 border-alegra-sand/50 p-6 shadow-sm space-y-4 transition-all">
-          <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+        <div className="bg-surface-container-lowest rounded-2xl border border-surface-container-high p-5 sm:p-6 shadow-xs space-y-4 transition-all">
+          <div className="flex justify-between items-center border-b border-surface-container-high pb-3">
             <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-alegra-sand-dark" />
-              <h3 className="font-bold text-sm text-alegra-navy">
-                Registrar Producto / Prenda al Paquete
+              <Sparkles className="w-4 h-4 text-secondary" />
+              <h3 className="font-bold text-sm text-primary font-display">
+                Estación de Ingesta: Registrar Prenda al Lote
               </h3>
             </div>
             <button
               onClick={() => setShowAddForm(false)}
-              className="text-xs text-gray-400 hover:text-gray-600"
+              className="text-xs font-semibold text-on-surface-variant hover:text-primary"
             >
               Cerrar
             </button>
@@ -475,14 +520,14 @@ export default function PackageDetailPage() {
 
           <form onSubmit={handleAddProduct} className="space-y-4">
             {errorMsg && (
-              <div className="p-3 text-xs bg-red-50 text-red-700 border border-red-200 rounded-lg">
+              <div className="p-3 text-xs bg-error-container text-on-error-container border border-error/20 rounded-xl font-medium">
                 {errorMsg}
               </div>
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="md:col-span-2">
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                <label className="block text-xs font-bold text-primary mb-1">
                   Nombre o Descripción de la Prenda *
                 </label>
                 <input
@@ -491,12 +536,12 @@ export default function PackageDetailPage() {
                   placeholder="Ej. Vestido casual estampado floral talla M"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:border-alegra-navy"
+                  className="w-full px-3 py-2 text-xs bg-surface-container-low rounded-xl border border-surface-container-high text-on-surface focus:outline-hidden focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                <label className="block text-xs font-bold text-primary mb-1">
                   Precio de Venta (Q) *
                 </label>
                 <input
@@ -507,14 +552,14 @@ export default function PackageDetailPage() {
                   placeholder="Ej. 150.00"
                   value={salePrice}
                   onChange={(e) => setSalePrice(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:border-alegra-navy"
+                  className="w-full px-3 py-2 text-xs bg-surface-container-low rounded-xl border border-surface-container-high text-on-surface font-bold focus:outline-hidden focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                <label className="block text-xs font-bold text-primary mb-1">
                   Peso Individual (lb) (Opcional)
                 </label>
                 <input
@@ -524,17 +569,17 @@ export default function PackageDetailPage() {
                   placeholder="Ej. 0.85"
                   value={weight}
                   onChange={(e) => setWeight(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:border-alegra-navy"
+                  className="w-full px-3 py-2 text-xs bg-surface-container-low rounded-xl border border-surface-container-high text-on-surface focus:outline-hidden focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary"
                 />
                 {estimatedCost !== null && (
-                  <p className="text-[11px] text-emerald-700 mt-1 font-medium bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  <p className="text-[11px] text-emerald-800 mt-1 font-semibold bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
                     Costo prorrateado por peso: <b>{formatCurrency(estimatedCost)}</b>
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                <label className="block text-xs font-bold text-primary mb-1">
                   Código de Barras Personalizado (Opcional)
                 </label>
                 <input
@@ -542,15 +587,15 @@ export default function PackageDetailPage() {
                   placeholder="Auto-generado si se deja vacío"
                   value={customBarcode}
                   onChange={(e) => setCustomBarcode(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:border-alegra-navy font-mono"
+                  className="w-full px-3 py-2 text-xs bg-surface-container-low rounded-xl border border-surface-container-high text-on-surface font-mono focus:outline-hidden focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary"
                 />
               </div>
             </div>
 
             {/* Subida de Fotos Directa (Archivos) */}
             <div className="space-y-2">
-              <label className="block text-xs font-semibold text-gray-700">
-                Fotografías de la Prenda (Subir desde dispositivo)
+              <label className="block text-xs font-bold text-primary">
+                Fotografías de la Prenda
               </label>
 
               <div className="flex items-center gap-3">
@@ -565,12 +610,12 @@ export default function PackageDetailPage() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-alegra-navy rounded-lg border border-gray-300 transition-colors"
+                  className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold bg-surface-container-low hover:bg-surface-container text-primary rounded-xl border border-surface-container-high transition-colors"
                 >
-                  <Upload className="w-4 h-4 text-alegra-sand-dark" />
+                  <Upload className="w-4 h-4 text-secondary" />
                   <span>Seleccionar o Tomar Fotos</span>
                 </button>
-                <span className="text-xs text-gray-400">
+                <span className="text-xs text-on-surface-variant">
                   {selectedFiles.length === 0
                     ? "Sin imágenes seleccionadas"
                     : `${selectedFiles.length} imagen(es) seleccionada(s)`}
@@ -583,7 +628,7 @@ export default function PackageDetailPage() {
                   {previewUrls.map((url, idx) => (
                     <div
                       key={idx}
-                      className="relative w-16 h-16 rounded-lg border border-gray-200 overflow-hidden group shadow-xs"
+                      className="relative w-16 h-16 rounded-xl border border-surface-container-high overflow-hidden shadow-xs"
                     >
                       <img
                         src={url}
@@ -603,25 +648,27 @@ export default function PackageDetailPage() {
               )}
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+            <div className="flex justify-end gap-2 pt-2 border-t border-surface-container-high">
               <button
                 type="button"
                 onClick={() => setShowAddForm(false)}
-                className="px-4 py-2 text-xs font-medium text-gray-600 hover:text-gray-800"
+                className="px-4 py-2 text-xs font-semibold text-on-surface-variant hover:text-on-surface"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
                 disabled={submitting}
-                className="px-5 py-2 text-xs font-semibold bg-alegra-navy text-white rounded-lg hover:bg-alegra-navy-light disabled:opacity-50 transition-colors shadow-xs flex items-center gap-2"
+                className="px-5 py-2 text-xs font-bold bg-primary hover:bg-primary-container text-on-primary rounded-xl disabled:opacity-50 transition-all shadow-xs flex items-center gap-2"
               >
                 {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {uploadingImages
-                  ? "Subiendo imágenes..."
-                  : submitting
-                  ? "Guardando..."
-                  : "Guardar Producto"}
+                <span>
+                  {uploadingImages
+                    ? "Subiendo imágenes..."
+                    : submitting
+                    ? "Guardando..."
+                    : "Guardar Producto"}
+                </span>
               </button>
             </div>
           </form>
@@ -636,27 +683,27 @@ export default function PackageDetailPage() {
         const displayedProducts = showSold ? pkg.products : activeProducts;
 
         return (
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-              <h2 className="text-base font-bold text-alegra-navy flex items-center gap-2">
-                <Tag className="w-4 h-4 text-alegra-sand-dark" />
-                Prendas en Stock ({activeProducts.length})
+              <h2 className="text-base font-bold font-display text-primary flex items-center gap-2">
+                <Tag className="w-4 h-4 text-secondary" />
+                <span>Manifiesto de Prendas ({activeProducts.length} activas)</span>
               </h2>
 
               {soldCount > 0 && (
                 <button
                   type="button"
                   onClick={() => setShowSold(!showSold)}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 transition-colors flex items-center gap-1.5 self-start sm:self-auto shadow-2xs"
+                  className="text-xs font-semibold px-3 py-1.5 rounded-xl border border-surface-container-high bg-surface-container-lowest hover:bg-surface-container-low text-on-surface transition-colors flex items-center gap-1.5 self-start sm:self-auto shadow-xs"
                 >
                   {showSold ? (
                     <>
-                      <Eye className="w-3.5 h-3.5 text-gray-500" />
+                      <Eye className="w-3.5 h-3.5 text-on-surface-variant" />
                       <span>Ocultar vendidas ({soldCount})</span>
                     </>
                   ) : (
                     <>
-                      <Eye className="w-3.5 h-3.5 text-alegra-sand-dark" />
+                      <Eye className="w-3.5 h-3.5 text-secondary" />
                       <span>Mostrar vendidas ({soldCount})</span>
                     </>
                   )}
@@ -665,27 +712,27 @@ export default function PackageDetailPage() {
             </div>
 
             {pkg.products.length === 0 ? (
-              <div className="text-center py-12 bg-white rounded-xl border border-alegra-border p-6">
-                <Tag className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-gray-700">No se han desglosado prendas aún</p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  Haz clic en "Desglosar Prenda" arriba para registrar la primera prenda de este paquete.
+              <div className="text-center py-12 bg-surface-container-lowest rounded-2xl border border-surface-container-high p-6 shadow-xs">
+                <Tag className="w-10 h-10 text-outline-variant mx-auto mb-2" />
+                <p className="text-sm font-bold text-primary">No se han desglosado prendas aún</p>
+                <p className="text-xs text-on-surface-variant mt-0.5">
+                  Haz clic en "+ Prenda" arriba para registrar la primera prenda de este paquete.
                 </p>
               </div>
             ) : displayedProducts.length === 0 ? (
-              <div className="text-center py-12 bg-white rounded-xl border border-alegra-border p-6">
+              <div className="text-center py-12 bg-surface-container-lowest rounded-2xl border border-surface-container-high p-6 shadow-xs">
                 <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-gray-800">¡Todas las prendas de este lote han sido vendidas!</p>
-                <p className="text-xs text-gray-400 mt-0.5 mb-3">
+                <p className="text-sm font-bold text-primary">¡Todas las prendas de este lote han sido vendidas!</p>
+                <p className="text-xs text-on-surface-variant mt-0.5 mb-3">
                   No hay prendas activas en stock actualmente para este lote.
                 </p>
                 <button
                   type="button"
                   onClick={() => setShowSold(true)}
-                  className="text-xs font-semibold text-alegra-navy bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1.5"
+                  className="text-xs font-bold text-primary bg-secondary-fixed hover:bg-secondary-fixed-dim px-3.5 py-2 rounded-xl transition-colors inline-flex items-center gap-1.5 shadow-xs"
                 >
                   <Eye className="w-3.5 h-3.5" />
-                  Ver las {soldCount} prendas vendidas
+                  <span>Ver las {soldCount} prendas vendidas</span>
                 </button>
               </div>
             ) : (
@@ -697,14 +744,14 @@ export default function PackageDetailPage() {
                   return (
                     <div
                       key={prod.id}
-                      className="bg-white rounded-xl border border-alegra-border p-4 shadow-xs flex flex-col justify-between hover:border-gray-300 transition-all space-y-3"
+                      className="bg-surface-container-lowest rounded-2xl border border-surface-container-high p-4 shadow-xs flex flex-col justify-between hover:border-secondary transition-all space-y-3"
                     >
                       <div className="space-y-3">
                         {/* Foto, Nombre y Botón de Visualización en Grande */}
                         <div className="flex gap-3 items-start">
                           <div
                             onClick={() => photoList.length > 0 && handleOpenLightbox(prod, 0)}
-                            className={`relative w-20 h-20 rounded-lg bg-gray-100 border border-gray-200 overflow-hidden shrink-0 flex items-center justify-center ${
+                            className={`relative w-20 h-20 rounded-xl bg-surface-container-low border border-surface-container-high overflow-hidden shrink-0 flex items-center justify-center ${
                               photoList.length > 0 ? "cursor-pointer group" : ""
                             }`}
                             title={photoList.length > 0 ? "Haz clic para ver fotos en grande" : "Sin foto"}
@@ -716,17 +763,17 @@ export default function PackageDetailPage() {
                                   alt={prod.name}
                                   className="w-full h-full object-cover transition-transform group-hover:scale-105"
                                 />
-                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                <div className="absolute inset-0 bg-primary/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                                   <Eye className="w-5 h-5 text-white" />
                                 </div>
                                 {photoList.length > 1 && (
-                                  <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[10px] font-bold px-1 rounded">
+                                  <span className="absolute bottom-1 right-1 bg-primary/80 text-white text-[10px] font-bold px-1.5 rounded-md">
                                     +{photoList.length - 1}
                                   </span>
                                 )}
                               </>
                             ) : (
-                              <ImageIcon className="w-7 h-7 text-gray-300" />
+                              <ImageIcon className="w-7 h-7 text-outline-variant" />
                             )}
                           </div>
 
@@ -736,7 +783,7 @@ export default function PackageDetailPage() {
                               <div className="flex items-center gap-1">
                                 <button
                                   onClick={() => handleOpenEditModal(prod)}
-                                  className="p-1 text-gray-400 hover:text-alegra-navy hover:bg-gray-100 rounded-md transition-colors"
+                                  className="p-1 text-on-surface-variant hover:text-primary hover:bg-surface-container-low rounded-lg transition-colors"
                                   title="Editar prenda"
                                 >
                                   <Edit2 className="w-3.5 h-3.5" />
@@ -744,22 +791,22 @@ export default function PackageDetailPage() {
                                 <button
                                   onClick={() => handleDeleteProduct(prod)}
                                   disabled={deletingProductId === prod.id}
-                                  className="p-1 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors disabled:opacity-50"
+                                  className="p-1 text-on-surface-variant hover:text-error hover:bg-error-container/20 rounded-lg transition-colors disabled:opacity-50"
                                   title="Eliminar prenda"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               </div>
                             </div>
-                            <h4 className="text-sm font-semibold text-alegra-navy truncate" title={prod.name}>
+                            <h4 className="text-xs sm:text-sm font-bold text-primary truncate" title={prod.name}>
                               {prod.name}
                             </h4>
                             <div className="flex items-center gap-2 mt-1 text-xs">
-                              <span className="font-bold text-alegra-navy">
+                              <span className="font-bold text-primary font-display">
                                 {formatCurrency(prod.salePrice)}
                               </span>
                               {prod.weight && (
-                                <span className="text-gray-400">
+                                <span className="text-on-surface-variant text-[11px]">
                                   • {formatWeight(prod.weight)}
                                 </span>
                               )}
@@ -769,8 +816,9 @@ export default function PackageDetailPage() {
 
                         {/* Costo Prorrateado */}
                         {prod.calculatedCost !== null && Number(prod.calculatedCost) > 0 && (
-                          <div className="text-[11px] text-gray-500 bg-alegra-sand-light/50 px-2 py-1 rounded">
-                            Costo base estimado: <b>{formatCurrency(prod.calculatedCost)}</b>
+                          <div className="text-[11px] text-on-surface-variant bg-surface-container-low px-2.5 py-1 rounded-lg flex items-center justify-between">
+                            <span>Costo base:</span>
+                            <b className="text-primary font-mono">{formatCurrency(prod.calculatedCost)}</b>
                           </div>
                         )}
 
@@ -780,29 +828,29 @@ export default function PackageDetailPage() {
                             value={prod.barcode}
                             label={prod.name}
                             showPrintButton={true}
-                            height={36}
+                            height={34}
                           />
                         </div>
                       </div>
 
-                      {/* Acciones Rápidas: Ver fotos en grande, Editar y Eliminar */}
-                      <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
+                      {/* Acciones Rápidas */}
+                      <div className="pt-2 border-t border-surface-container-high flex items-center justify-between text-xs">
                         {photoList.length > 0 ? (
                           <button
                             onClick={() => handleOpenLightbox(prod, 0)}
-                            className="inline-flex items-center gap-1 text-alegra-sand-dark hover:text-alegra-navy font-semibold transition-colors"
+                            className="inline-flex items-center gap-1 text-secondary hover:text-primary font-bold transition-colors text-[11px]"
                           >
                             <Eye className="w-3.5 h-3.5" />
-                            <span>Ver fotos en grande ({photoList.length})</span>
+                            <span>Fotos ({photoList.length})</span>
                           </button>
                         ) : (
-                          <span className="text-gray-400 text-[11px] italic">Sin imágenes</span>
+                          <span className="text-outline-variant text-[11px] italic">Sin fotos</span>
                         )}
 
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
                           <button
                             onClick={() => handleOpenEditModal(prod)}
-                            className="inline-flex items-center gap-1 text-gray-600 hover:text-alegra-navy font-medium transition-colors"
+                            className="inline-flex items-center gap-1 text-on-surface-variant hover:text-primary font-semibold text-[11px] transition-colors"
                           >
                             <Edit2 className="w-3 h-3" />
                             <span>Editar</span>
@@ -810,11 +858,11 @@ export default function PackageDetailPage() {
                           <button
                             onClick={() => handleDeleteProduct(prod)}
                             disabled={deletingProductId === prod.id}
-                            className="inline-flex items-center gap-1 text-rose-500 hover:text-rose-700 font-medium transition-colors disabled:opacity-50"
+                            className="inline-flex items-center gap-1 text-error hover:text-error/80 font-semibold text-[11px] transition-colors disabled:opacity-50"
                             title="Eliminar prenda"
                           >
                             <Trash2 className="w-3 h-3" />
-                            <span>Eliminar</span>
+                            <span>Borrar</span>
                           </button>
                         </div>
                       </div>
