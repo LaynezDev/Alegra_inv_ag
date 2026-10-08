@@ -76,6 +76,7 @@ export default function PosLivePage() {
   const [completedOrder, setCompletedOrder] = useState<any | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [copiedWhatsapp, setCopiedWhatsapp] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // 1. Cargar comandas guardadas en localStorage al montar
   useEffect(() => {
@@ -377,10 +378,8 @@ export default function PosLivePage() {
   const totalDiscount = activeTab ? activeTab.items.reduce((acc, i) => acc + i.discountAmount, 0) : 0;
   const totalToPay = Math.max(0, subtotal - totalDiscount);
 
-  // Copiar detalle de recibo formateado para WhatsApp
-  const handleCopyWhatsapp = () => {
-    if (!completedOrder) return;
-    const o = completedOrder;
+  // Generar texto para WhatsApp con enlace a fotos
+  const getWhatsappReceiptMessage = (o: any) => {
     let message = `✨ *ALEGRA - RECIBO DE COMPRA* ✨\n`;
     message += `Comanda: *${o.orderNumber}*\n`;
     message += `Cliente: *${o.customer.fullName}*\n`;
@@ -389,7 +388,8 @@ export default function PosLivePage() {
     message += `*DETALLE DE PRENDAS:*\n`;
 
     o.items.forEach((item: any, idx: number) => {
-      message += `${idx + 1}. ${item.product.name}\n`;
+      const name = item.product?.name || item.name || "Prenda";
+      message += `${idx + 1}. ${name}\n`;
       if (Number(item.discountAmount) > 0) {
         message += `   Precio: Q${Number(item.originalPrice).toFixed(2)} - Desc: Q${Number(item.discountAmount).toFixed(2)} = *Q${Number(item.finalPrice).toFixed(2)}*\n`;
       } else {
@@ -404,14 +404,40 @@ export default function PosLivePage() {
     }
     message += `*TOTAL A PAGAR: Q${Number(o.totalAmount).toFixed(2)}*\n`;
     message += `Estado: *PENDIENTE DE PAGO (Apartado)* ⏳\n\n`;
+
+    // Enlace público al visor de fotos de prendas del cliente
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const shareUrl = `${origin}/p/${o.shareToken || o.id}`;
+    message += `👗 *Ver fotos de tus prendas aquí:*\n`;
+    message += `👉 ${shareUrl}\n\n`;
+
     message += `💳 *Datos de Pago:*\n`;
     message += `Por favor envíanos la boleta o comprobante con el número de autorización para procesar tu envío.\n\n`;
-    message += `📍 *Entrega:* ${o.customer.fullAddress}, ${o.customer.municipality.name}, ${o.customer.department.name}\n`;
+    const depName = o.customer.department?.name || o.customer.departmentName || "";
+    const munName = o.customer.municipality?.name || o.customer.municipalityName || "";
+    message += `📍 *Entrega:* ${o.customer.fullAddress}, ${munName}, ${depName}\n`;
     message += `¡Muchas gracias por tu compra en Alegra! 💕`;
 
-    navigator.clipboard.writeText(message);
+    return message;
+  };
+
+  // Copiar detalle de recibo formateado para WhatsApp
+  const handleCopyWhatsapp = () => {
+    if (!completedOrder) return;
+    const msg = getWhatsappReceiptMessage(completedOrder);
+    navigator.clipboard.writeText(msg);
     setCopiedWhatsapp(true);
     setTimeout(() => setCopiedWhatsapp(false), 3000);
+  };
+
+  // Copiar únicamente el enlace a las fotos del pedido
+  const handleCopyLink = () => {
+    if (!completedOrder) return;
+    const origin = window.location.origin;
+    const url = `${origin}/p/${completedOrder.shareToken || completedOrder.id}`;
+    navigator.clipboard.writeText(url);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
   };
 
   return (
@@ -978,35 +1004,71 @@ export default function PosLivePage() {
             </div>
 
             {/* Acciones de Impresión y Compartir WhatsApp */}
-            <div className="p-4 bg-gray-50 border-t border-gray-200 flex flex-col gap-2">
-              <button
-                onClick={handleCopyWhatsapp}
-                className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2"
-              >
-                {copiedWhatsapp ? (
-                  <>
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>¡Copiado para WhatsApp!</span>
-                  </>
-                ) : (
-                  <>
-                    <MessageCircle className="w-4 h-4" />
-                    <span>Copiar Formato para WhatsApp</span>
-                  </>
-                )}
-              </button>
+            <div className="p-4 bg-surface-container-low border-t border-surface-container-high flex flex-col gap-2">
+              {/* Enlace directo a WhatsApp del cliente si tiene teléfono */}
+              {completedOrder.customer.phonePrimary && (
+                <a
+                  href={`https://wa.me/502${completedOrder.customer.phonePrimary.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(getWhatsappReceiptMessage(completedOrder))}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 shadow-xs"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>Enviar por WhatsApp al Cliente (con Fotos)</span>
+                </a>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyWhatsapp}
+                  className="w-full py-2 px-3 bg-surface-container hover:bg-surface-container-high text-primary font-semibold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 border border-surface-container-high"
+                >
+                  {copiedWhatsapp ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span className="text-emerald-700 font-bold">¡Texto Copiado!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      <span>Copiar Resumen WhatsApp</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="w-full py-2 px-3 bg-surface-container hover:bg-surface-container-high text-primary font-semibold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 border border-surface-container-high"
+                >
+                  {copiedLink ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span className="text-emerald-700 font-bold">¡Enlace Copiado!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Share2 className="w-4 h-4 text-secondary" />
+                      <span>Copiar Enlace Fotos</span>
+                    </>
+                  )}
+                </button>
+              </div>
 
               <button
+                type="button"
                 onClick={() => window.print()}
-                className="w-full py-2 px-4 bg-alegra-navy hover:bg-alegra-navy-light text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2"
+                className="w-full py-2 px-4 bg-primary hover:bg-primary/90 text-on-primary font-semibold text-xs rounded-xl transition-colors flex items-center justify-center gap-2"
               >
                 <Printer className="w-4 h-4" />
                 <span>Imprimir Ticket Térmico</span>
               </button>
 
               <button
+                type="button"
                 onClick={() => setIsReceiptModalOpen(false)}
-                className="w-full py-1.5 text-xs text-gray-500 hover:text-gray-700 text-center"
+                className="w-full py-1.5 text-xs text-on-surface-variant hover:text-on-surface text-center font-medium"
               >
                 Listo / Cerrar
               </button>

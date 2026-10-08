@@ -22,10 +22,12 @@ import {
   ChevronRight,
   Trash2,
   Loader2,
-  Printer
+  Printer,
+  Share2
 } from "lucide-react";
 import BarcodeDisplay from "@/components/BarcodeDisplay";
 import BarcodePrintModal from "@/components/BarcodePrintModal";
+import CatalogShareModal from "@/components/CatalogShareModal";
 import { formatCurrency, formatWeight, calculateCostByWeight } from "@/lib/utils";
 
 interface Product {
@@ -105,6 +107,9 @@ export default function PackageDetailPage() {
   // Modal de impresión de códigos de barra
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [printSelectedIds, setPrintSelectedIds] = useState<(string | number)[]>([]);
+
+  // Modal para compartir catálogo público
+  const [catalogModalOpen, setCatalogModalOpen] = useState(false);
 
   // Estado Lightbox / Visualizador de Imágenes en Grande
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -499,15 +504,27 @@ export default function PackageDetailPage() {
         </div>
 
         {pkg.products.length > 0 && (
-          <button
-            type="button"
-            onClick={handleOpenPrintAll}
-            className="inline-flex items-center gap-2 px-3.5 py-2 bg-surface-container-low hover:bg-surface-container-high text-primary text-xs font-bold rounded-xl border border-surface-container-high transition-all shadow-xs self-start sm:self-auto cursor-pointer"
-            title="Imprimir todos o seleccionar códigos de barra"
-          >
-            <Printer className="w-4 h-4 text-secondary" />
-            <span>Imprimir Códigos ({pkg.products.length})</span>
-          </button>
+          <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setCatalogModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-surface-container-low hover:bg-surface-container-high text-primary text-xs font-bold rounded-xl border border-surface-container-high transition-all shadow-xs cursor-pointer"
+              title="Generar enlace de catálogo para clientes"
+            >
+              <Share2 className="w-4 h-4 text-emerald-600" />
+              <span>Generar Catálogo</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleOpenPrintAll}
+              className="inline-flex items-center gap-2 px-3.5 py-2 bg-surface-container-low hover:bg-surface-container-high text-primary text-xs font-bold rounded-xl border border-surface-container-high transition-all shadow-xs cursor-pointer"
+              title="Imprimir todos o seleccionar códigos de barra"
+            >
+              <Printer className="w-4 h-4 text-secondary" />
+              <span>Imprimir Códigos ({pkg.products.length})</span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -813,15 +830,27 @@ export default function PackageDetailPage() {
 
               <div className="flex items-center gap-2 self-start sm:self-auto">
                 {pkg.products.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleOpenPrintAll}
-                    className="text-xs font-bold px-3 py-1.5 rounded-xl border border-secondary/30 bg-secondary-fixed/30 hover:bg-secondary-fixed/50 text-on-secondary-fixed transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
-                    title="Imprimir todos o seleccionar códigos de barra"
-                  >
-                    <Printer className="w-3.5 h-3.5 text-secondary" />
-                    <span>Imprimir Códigos</span>
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setCatalogModalOpen(true)}
+                      className="text-xs font-bold px-3 py-1.5 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+                      title="Generar enlace de catálogo para clientes"
+                    >
+                      <Share2 className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>Catálogo</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleOpenPrintAll}
+                      className="text-xs font-bold px-3 py-1.5 rounded-xl border border-secondary/30 bg-secondary-fixed/30 hover:bg-secondary-fixed/50 text-on-secondary-fixed transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+                      title="Imprimir todos o seleccionar códigos de barra"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-secondary" />
+                      <span>Imprimir Códigos</span>
+                    </button>
+                  </>
                 )}
 
                 {soldCount > 0 && (
@@ -1328,6 +1357,17 @@ export default function PackageDetailPage() {
           products={pkg.products}
           packageCode={pkg.code}
           initialSelectedIds={printSelectedIds}
+        />
+      )}
+
+      {/* Modal para Compartir Catálogo de Prendas */}
+      {pkg && (
+        <CatalogShareModal
+          isOpen={catalogModalOpen}
+          onClose={() => setCatalogModalOpen(false)}
+          products={pkg.products}
+          packageCode={pkg.code}
+          defaultTitle={pkg.name ? `Catálogo - ${pkg.name}` : `Catálogo - Fardo ${pkg.code}`}
         />
       )}
 

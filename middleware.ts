@@ -18,6 +18,7 @@ export async function middleware(request: NextRequest) {
   // 2. Rutas públicas de catálogo/pedidos compartidos con clientes
   if (
     pathname.startsWith("/p/") ||
+    pathname.startsWith("/c/") ||
     pathname.startsWith("/catalogo/") ||
     pathname.startsWith("/api/public/")
   ) {

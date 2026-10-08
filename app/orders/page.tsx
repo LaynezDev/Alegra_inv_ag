@@ -307,6 +307,45 @@ export default function OrdersPage() {
     }
   };
 
+  // Estado para copiar link público de fotos
+  const [copiedOrderId, setCopiedOrderId] = useState<number | string | null>(null);
+
+  // Generar texto para WhatsApp con enlace a fotos
+  const getOrderWhatsappMessage = (o: Order) => {
+    let message = `✨ *ALEGRA - DETALLE DE TU PEDIDO* ✨\n`;
+    message += `Comanda: *${o.orderNumber}*\n`;
+    message += `Cliente: *${o.customer.fullName}*\n`;
+    message += `Estado: *${o.status.replace("_", " ").toUpperCase()}*\n`;
+    message += `━━━━━━━━━━━━━━━━━━━━━\n`;
+    message += `*PRENDAS:* (${o.items.length})\n`;
+    o.items.forEach((item, idx) => {
+      const name = item.product?.name || (item as any).name || "Prenda";
+      message += `${idx + 1}. ${name} - Q${Number(item.finalPrice).toFixed(2)}\n`;
+    });
+    message += `━━━━━━━━━━━━━━━━━━━━━\n`;
+    message += `*TOTAL: Q${Number(o.totalAmount).toFixed(2)}*\n`;
+    if (Number(o.totalPaid) > 0) {
+      message += `Total Abonado: Q${Number(o.totalPaid).toFixed(2)}\n`;
+    }
+    if (Number(o.balanceDue) > 0) {
+      message += `*Saldo Pendiente: Q${Number(o.balanceDue).toFixed(2)}*\n`;
+    }
+
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const shareUrl = `${origin}/p/${(o as any).shareToken || o.id}`;
+    message += `\n👗 *Fotos de tus prendas y detalles aquí:*\n👉 ${shareUrl}\n\n`;
+    message += `¡Muchas gracias por tu compra en Alegra! 💕`;
+    return message;
+  };
+
+  const handleCopyOrderLink = (order: Order) => {
+    const origin = window.location.origin;
+    const url = `${origin}/p/${(order as any).shareToken || order.id}`;
+    navigator.clipboard.writeText(url);
+    setCopiedOrderId(order.id);
+    setTimeout(() => setCopiedOrderId(null), 2500);
+  };
+
   // Ver recibo modal
   const handleViewReceipt = (order: Order) => {
     setSelectedOrder(order);
@@ -691,17 +730,28 @@ export default function OrdersPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     {phoneDigits && (
                       <a
-                        href={`https://wa.me/502${phoneDigits}`}
+                        href={`https://wa.me/502${phoneDigits}?text=${encodeURIComponent(getOrderWhatsappMessage(order))}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-on-primary text-xs font-semibold hover:bg-primary/90 transition-all shadow-xs"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500 transition-all shadow-xs"
                       >
-                        <span className="material-symbols-outlined text-sm text-secondary-fixed">
+                        <span className="material-symbols-outlined text-sm">
                           chat
                         </span>
-                        <span>+502 {order.customer.phonePrimary} WhatsApp</span>
+                        <span>WhatsApp (con Fotos)</span>
                       </a>
                     )}
+                    <button
+                      onClick={() => handleCopyOrderLink(order)}
+                      type="button"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-surface-container-low text-primary text-xs font-semibold hover:bg-surface-container-high transition-colors"
+                      title="Copiar enlace público de fotos para el cliente"
+                    >
+                      <span className="material-symbols-outlined text-sm text-secondary">
+                        {copiedOrderId === order.id ? "check" : "share"}
+                      </span>
+                      <span>{copiedOrderId === order.id ? "¡Enlace Copiado!" : "Enlace Fotos"}</span>
+                    </button>
                     <button
                       onClick={() => handleViewReceipt(order)}
                       type="button"
@@ -1342,15 +1392,41 @@ export default function OrdersPage() {
             </div>
 
             <div className="p-4 bg-surface-container-low border-t border-surface-container-high flex flex-col gap-2">
-              <button
-                onClick={() => window.print()}
-                className="w-full py-2.5 px-4 bg-primary hover:bg-primary/90 text-on-primary font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm"
-              >
-                <span className="material-symbols-outlined text-sm text-secondary-fixed">
-                  print
-                </span>
-                <span>Imprimir Recibo Térmico</span>
-              </button>
+              {/* Enviar WhatsApp con Fotos */}
+              {selectedOrder.customer.phonePrimary && (
+                <a
+                  href={`https://wa.me/502${selectedOrder.customer.phonePrimary.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(getOrderWhatsappMessage(selectedOrder))}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 shadow-xs"
+                >
+                  <span className="material-symbols-outlined text-sm">chat</span>
+                  <span>Enviar por WhatsApp al Cliente (con Fotos)</span>
+                </a>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleCopyOrderLink(selectedOrder)}
+                  className="w-full py-2 px-3 bg-surface-container hover:bg-surface-container-high text-primary font-semibold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 border border-surface-container-high"
+                >
+                  <span className="material-symbols-outlined text-sm text-secondary">
+                    {copiedOrderId === selectedOrder.id ? "check" : "share"}
+                  </span>
+                  <span>{copiedOrderId === selectedOrder.id ? "¡Enlace Copiado!" : "Copiar Enlace Fotos"}</span>
+                </button>
+
+                <button
+                  onClick={() => window.print()}
+                  className="w-full py-2 px-4 bg-primary hover:bg-primary/90 text-on-primary font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 shadow-xs"
+                >
+                  <span className="material-symbols-outlined text-sm text-secondary-fixed">
+                    print
+                  </span>
+                  <span>Imprimir Térmico</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

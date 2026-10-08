@@ -545,6 +545,7 @@ export async function getFirestoreOrders(statusFilter?: string): Promise<any[]> 
 
     return {
       id: doc.id,
+      shareToken: data.shareToken || doc.id,
       ...data,
       subtotal: Number(data.subtotal || 0),
       totalDiscount: Number(data.totalDiscount || 0),
@@ -687,10 +688,12 @@ export async function createFirestoreOrder(orderData: {
     const countSnap = await adminDb.collection("orders").count().get();
     const count = countSnap.data().count;
     const orderNumber = `CMD-${new Date().getFullYear()}-${String(count + 1).padStart(4, "0")}`;
+    const shareToken = Math.random().toString(36).substring(2, 10);
 
     const newOrderRef = adminDb.collection("orders").doc();
     const orderPayload = {
       orderNumber,
+      shareToken,
       customerId: custRef.id,
       customer: {
         fullName: cust.fullName,
@@ -1038,3 +1041,186 @@ export async function getFirestoreRoiReport(): Promise<any> {
     packages: packageReports,
   };
 }
+
+// -----------------------------------------------------------
+// VISTAS PÚBLICAS PARA CLIENTES: PEDIDOS (/p/[token]) Y CATÁLOGOS (/c/[token])
+// -----------------------------------------------------------
+
+/**
+ * Obtiene los detalles públicos de una orden mediante su shareToken o ID.
+ * Excluye datos internos o sensibles (costos, notas de auditoría, etc.).
+ */
+export async function getPublicOrder(tokenOrId: string): Promise<any | null> {
+  if (!adminDb) return null;
+  const raw = String(tokenOrId || "").trim();
+  if (!raw) return null;
+
+  let orderDoc: any = null;
+
+  // 1. Buscar primero por shareToken
+  const snapByToken = await adminDb.collection("orders").where("shareToken", "==", raw).limit(1).get();
+  if (!snapByToken.empty) {
+    orderDoc = snapByToken.docs[0];
+  } else {
+    // 2. Buscar por ID directo de documento
+    const snapById = await adminDb.collection("orders").doc(raw).get();
+    if (snapById.exists) {
+      orderDoc = snapById;
+    }
+  }
+
+  if (!orderDoc) return null;
+
+  const data = orderDoc.data();
+
+  // Si no tenía shareToken asignado previamente, generarlo y guardarlo
+  let shareToken = data.shareToken;
+  if (!shareToken) {
+    shareToken = Math.random().toString(36).substring(2, 10);
+    try {
+      await orderDoc.ref.update({ shareToken });
+    } catch {
+      // Ignorar error de actualización si es solo lectura
+    }
+  }
+
+  const payments = data.payments || [];
+  const totalPaid = payments.reduce((acc: number, p: any) => acc + Number(p.amount || 0), 0);
+  const balanceDue = Math.max(0, Number(data.totalAmount || 0) - totalPaid);
+
+  // Asegurar que cada prenda tenga sus fotos correspondientes
+  const itemsWithPhotos = await Promise.all(
+    (data.items || []).map(async (item: any) => {
+      let photos = Array.isArray(item.photos) ? item.photos : [];
+
+      // Si el item no tenía fotos guardadas en la orden, buscarlas en la colección products
+      if (photos.length === 0 && item.productId) {
+        try {
+          const pSnap = await adminDb.collection("products").doc(String(item.productId)).get();
+          if (pSnap.exists) {
+            const pData = pSnap.data()!;
+            if (Array.isArray(pData.photos) && pData.photos.length > 0) {
+              photos = pData.photos;
+            }
+          }
+        } catch {
+          // continuar
+        }
+      }
+
+      return {
+        id: item.productId || item.barcode || Math.random().toString(),
+        name: item.name || "Prenda",
+        barcode: item.barcode || "",
+        originalPrice: Number(item.originalPrice || 0),
+        discountAmount: Number(item.discountAmount || 0),
+        finalPrice: Number(item.finalPrice || 0),
+        photos,
+      };
+    })
+  );
+
+  return {
+    id: orderDoc.id,
+    orderNumber: data.orderNumber,
+    shareToken,
+    status: data.status,
+    customer: {
+      fullName: data.customer?.fullName || "Cliente",
+      phonePrimary: data.customer?.phonePrimary || "",
+      department: data.customer?.department?.name || "",
+      municipality: data.customer?.municipality?.name || "",
+      fullAddress: data.customer?.fullAddress || "",
+    },
+    items: itemsWithPhotos,
+    subtotal: Number(data.subtotal || 0),
+    totalDiscount: Number(data.totalDiscount || 0),
+    totalAmount: Number(data.totalAmount || 0),
+    totalPaid,
+    balanceDue,
+    createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || new Date().toISOString(),
+  };
+}
+
+/**
+ * Crea un enlace público para compartir un catálogo de prendas seleccionadas.
+ */
+export async function createPublicCatalog(catalogData: {
+  title?: string;
+  productIds: string[];
+  notes?: string;
+}): Promise<any> {
+  if (!adminDb) throw new Error("Firestore no configurado");
+  const shareToken = Math.random().toString(36).substring(2, 10);
+
+  const catalogPayload = {
+    title: catalogData.title?.trim() || "Catálogo de Prendas Seleccionadas",
+    shareToken,
+    productIds: catalogData.productIds,
+    notes: catalogData.notes || null,
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  const docRef = await adminDb.collection("catalogs").add(catalogPayload);
+  return {
+    id: docRef.id,
+    ...catalogPayload,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Obtiene la información pública de un catálogo y los datos actualizados de sus prendas.
+ */
+export async function getPublicCatalog(tokenOrId: string): Promise<any | null> {
+  if (!adminDb) return null;
+  const raw = String(tokenOrId || "").trim();
+  if (!raw) return null;
+
+  let catDoc: any = null;
+  const snapByToken = await adminDb.collection("catalogs").where("shareToken", "==", raw).limit(1).get();
+  if (!snapByToken.empty) {
+    catDoc = snapByToken.docs[0];
+  } else {
+    const snapById = await adminDb.collection("catalogs").doc(raw).get();
+    if (snapById.exists) {
+      catDoc = snapById;
+    }
+  }
+
+  if (!catDoc) return null;
+  const data = catDoc.data();
+
+  const productIds: string[] = data.productIds || [];
+  const products: any[] = [];
+
+  for (const pid of productIds) {
+    try {
+      const pSnap = await adminDb.collection("products").doc(String(pid)).get();
+      if (pSnap.exists) {
+        const p = pSnap.data()!;
+        products.push({
+          id: pSnap.id,
+          name: p.name,
+          barcode: p.barcode,
+          salePrice: Number(p.salePrice || 0),
+          status: p.status, // "disponible", "apartado", "vendido"
+          photos: Array.isArray(p.photos) ? p.photos : [],
+        });
+      }
+    } catch {
+      // Ignorar prendas que hayan sido borradas
+    }
+  }
+
+  return {
+    id: catDoc.id,
+    title: data.title || "Catálogo de Prendas Seleccionadas",
+    shareToken: data.shareToken || catDoc.id,
+    notes: data.notes || null,
+    products,
+    createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
+  };
+}
+
