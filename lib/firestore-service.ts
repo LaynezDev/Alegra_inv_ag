@@ -526,6 +526,41 @@ export async function createFirestoreCustomer(custData: any): Promise<any> {
   };
 }
 
+export async function updateFirestoreCustomer(
+  customerId: string | number,
+  custData: any
+): Promise<any> {
+  if (!adminDb) throw new Error("Firestore no configurado");
+  const custRef = await resolveCustomerDocRef(customerId);
+
+  const updatePayload: any = {
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  if (custData.fullName !== undefined) updatePayload.fullName = custData.fullName.trim();
+  if (custData.phonePrimary !== undefined) updatePayload.phonePrimary = custData.phonePrimary.trim();
+  if (custData.phoneSecondary !== undefined) updatePayload.phoneSecondary = custData.phoneSecondary ? custData.phoneSecondary.trim() : null;
+  if (custData.tiktokUsername !== undefined) updatePayload.tiktokUsername = custData.tiktokUsername ? custData.tiktokUsername.trim() : null;
+  if (custData.instagramUsername !== undefined) updatePayload.instagramUsername = custData.instagramUsername ? custData.instagramUsername.trim() : null;
+  if (custData.facebookUsername !== undefined) updatePayload.facebookUsername = custData.facebookUsername ? custData.facebookUsername.trim() : null;
+  if (custData.fullAddress !== undefined) updatePayload.fullAddress = custData.fullAddress.trim();
+  if (custData.addressReference !== undefined) updatePayload.addressReference = custData.addressReference ? custData.addressReference.trim() : null;
+  if (custData.departmentName !== undefined) updatePayload.departmentName = custData.departmentName;
+  if (custData.municipalityName !== undefined) updatePayload.municipalityName = custData.municipalityName;
+
+  await custRef.update(updatePayload);
+
+  const snap = await custRef.get();
+  const data = snap.data()!;
+  return {
+    id: custRef.id,
+    ...data,
+    department: { name: data.departmentName },
+    municipality: { name: data.municipalityName },
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 // -----------------------------------------------------------
 // COMANDAS / ÓRDENES (CON TRANSACCIÓN ATÓMICA)
 // -----------------------------------------------------------
