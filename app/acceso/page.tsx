@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Lock, ShoppingBag, Delete, CheckCircle2, AlertCircle, ArrowRight } from "lucide-react";
+import { StoreSettings, DEFAULT_STORE_SETTINGS } from "@/lib/settings";
 
 export default function AccesoPage() {
   const router = useRouter();
@@ -11,6 +12,16 @@ export default function AccesoPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [isShaking, setIsShaking] = useState(false);
+  const [settings, setSettings] = useState<StoreSettings>(DEFAULT_STORE_SETTINGS);
+
+  useEffect(() => {
+    fetch("/api/public/settings")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setSettings(data);
+      })
+      .catch(() => {});
+  }, []);
 
   const handleSubmit = useCallback(async (pinToSubmit: string) => {
     if (loading || pinToSubmit.length < 4) return;
@@ -104,15 +115,25 @@ export default function AccesoPage() {
         {/* Card Contenedora */}
         <div className="bg-surface-container-lowest rounded-3xl p-6 sm:p-8 border border-surface-container-high shadow-xl shadow-black/5 text-center flex flex-col items-center">
           {/* Logo / Ícono */}
-          <div className="w-14 h-14 rounded-2xl bg-primary-container text-secondary-fixed flex items-center justify-center shadow-sm mb-4">
-            <ShoppingBag className="w-7 h-7" />
-          </div>
+          {settings.logoUrl ? (
+            <div className="w-16 h-16 rounded-2xl bg-white border border-surface-container-high flex items-center justify-center p-1.5 overflow-hidden shadow-sm mb-4">
+              <img
+                src={settings.logoUrl}
+                alt={settings.storeName || "Logo"}
+                className="max-w-full max-h-full object-contain"
+              />
+            </div>
+          ) : (
+            <div className="w-14 h-14 rounded-2xl bg-primary-container text-secondary-fixed flex items-center justify-center shadow-sm mb-4">
+              <ShoppingBag className="w-7 h-7" />
+            </div>
+          )}
 
           <h1 className="font-display font-black text-2xl tracking-wider text-primary">
-            ALEGRA
+            {settings.storeName || "ALEGRA"}
           </h1>
           <p className="text-xs font-semibold text-secondary uppercase tracking-widest mt-0.5 mb-6">
-            Terminal de Tienda
+            {settings.tagline || "Terminal de Tienda"}
           </p>
 
           {/* Estado de PIN (Círculos indicadores) */}

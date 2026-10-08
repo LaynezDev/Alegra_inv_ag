@@ -1,6 +1,7 @@
 import { adminDb } from "@/lib/firebase-admin";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { calculateCostByWeight } from "@/lib/utils";
+import { StoreSettings, DEFAULT_STORE_SETTINGS } from "@/lib/settings";
 
 export interface FirestoreDepartment {
   id: string;
@@ -1259,3 +1260,55 @@ export async function getPublicCatalog(tokenOrId: string): Promise<any | null> {
   };
 }
 
+/**
+ * Obtiene la configuración general de la tienda (branding, leyenda, sustantivo de productos, cuentas bancarias).
+ */
+export async function getStoreSettings(): Promise<StoreSettings> {
+  if (!adminDb) return DEFAULT_STORE_SETTINGS;
+  try {
+    const snap = await adminDb.collection("settings").doc("general").get();
+    if (!snap.exists) {
+      return DEFAULT_STORE_SETTINGS;
+    }
+    const data = snap.data();
+    return {
+      storeName: data?.storeName ?? DEFAULT_STORE_SETTINGS.storeName,
+      tagline: data?.tagline ?? DEFAULT_STORE_SETTINGS.tagline,
+      logoUrl: data?.logoUrl ?? DEFAULT_STORE_SETTINGS.logoUrl,
+      productNoun: data?.productNoun ?? DEFAULT_STORE_SETTINGS.productNoun,
+      nounSingular: data?.nounSingular ?? DEFAULT_STORE_SETTINGS.nounSingular,
+      nounPlural: data?.nounPlural ?? DEFAULT_STORE_SETTINGS.nounPlural,
+      nounGender: data?.nounGender ?? DEFAULT_STORE_SETTINGS.nounGender,
+      bankAccounts: Array.isArray(data?.bankAccounts) && data.bankAccounts.length > 0 
+        ? data.bankAccounts 
+        : DEFAULT_STORE_SETTINGS.bankAccounts,
+      updatedAt: data?.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data?.updatedAt,
+    };
+  } catch (error) {
+    console.error("Error al obtener configuración de tienda:", error);
+    return DEFAULT_STORE_SETTINGS;
+  }
+}
+
+/**
+ * Actualiza o guarda la configuración general de la tienda.
+ */
+export async function updateStoreSettings(settings: Partial<StoreSettings>): Promise<StoreSettings> {
+  if (!adminDb) throw new Error("Firestore Admin not initialized");
+  const docRef = adminDb.collection("settings").doc("general");
+  
+  const payload: any = {
+    storeName: settings.storeName ?? DEFAULT_STORE_SETTINGS.storeName,
+    tagline: settings.tagline ?? DEFAULT_STORE_SETTINGS.tagline,
+    logoUrl: settings.logoUrl ?? "",
+    productNoun: settings.productNoun ?? DEFAULT_STORE_SETTINGS.productNoun,
+    nounSingular: settings.nounSingular ?? DEFAULT_STORE_SETTINGS.nounSingular,
+    nounPlural: settings.nounPlural ?? DEFAULT_STORE_SETTINGS.nounPlural,
+    nounGender: settings.nounGender ?? DEFAULT_STORE_SETTINGS.nounGender,
+    bankAccounts: Array.isArray(settings.bankAccounts) ? settings.bankAccounts : DEFAULT_STORE_SETTINGS.bankAccounts,
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  await docRef.set(payload, { merge: true });
+  return getStoreSettings();
+}

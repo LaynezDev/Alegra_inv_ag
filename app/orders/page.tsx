@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { StoreSettings, DEFAULT_STORE_SETTINGS, getGrammarTexts } from "@/lib/settings";
 
 interface OrderItem {
   id: number;
@@ -88,6 +89,16 @@ export default function OrdersPage() {
 
   // Mensajes de error
   const [actionError, setActionError] = useState("");
+  const [settings, setSettings] = useState<StoreSettings>(DEFAULT_STORE_SETTINGS);
+
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setSettings(data);
+      })
+      .catch(() => {});
+  }, []);
 
   const fetchOrders = async (status = statusFilter) => {
     try {
@@ -312,14 +323,16 @@ export default function OrdersPage() {
 
   // Generar texto para WhatsApp con enlace a fotos
   const getOrderWhatsappMessage = (o: Order) => {
-    let message = `✨ *ALEGRA - DETALLE DE TU PEDIDO* ✨\n`;
+    const grammar = getGrammarTexts(settings);
+    const brand = settings.storeName || "ALEGRA";
+    let message = `✨ *${brand} - DETALLE DE TU PEDIDO* ✨\n`;
     message += `Comanda: *${o.orderNumber}*\n`;
     message += `Cliente: *${o.customer.fullName}*\n`;
     message += `Estado: *${o.status.replace("_", " ").toUpperCase()}*\n`;
     message += `━━━━━━━━━━━━━━━━━━━━━\n`;
-    message += `*PRENDAS:* (${o.items.length})\n`;
+    message += `*${grammar.capPlural.toUpperCase()}:* (${o.items.length})\n`;
     o.items.forEach((item, idx) => {
-      const name = item.product?.name || (item as any).name || "Prenda";
+      const name = item.product?.name || (item as any).name || grammar.capSingular;
       message += `${idx + 1}. ${name} - Q${Number(item.finalPrice).toFixed(2)}\n`;
     });
     message += `━━━━━━━━━━━━━━━━━━━━━\n`;
@@ -333,8 +346,8 @@ export default function OrdersPage() {
 
     const origin = typeof window !== "undefined" ? window.location.origin : "";
     const shareUrl = `${origin}/p/${(o as any).shareToken || o.id}`;
-    message += `\n👗 *Fotos de tus prendas y detalles aquí:*\n👉 ${shareUrl}\n\n`;
-    message += `¡Muchas gracias por tu compra en Alegra! 💕`;
+    message += `\n🛍️ *Fotos de tus ${grammar.plural} y detalles aquí:*\n👉 ${shareUrl}\n\n`;
+    message += `¡Muchas gracias por tu compra en ${brand}! 💕`;
     return message;
   };
 

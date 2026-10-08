@@ -12,10 +12,11 @@ import {
   Check, 
   ExternalLink, 
   MessageCircle, 
-  Image as ImageIcon,
-  Tag,
-  AlertCircle
+  Image as ImageIcon, 
+  Tag, 
+  AlertCircle 
 } from "lucide-react";
+import { StoreSettings, DEFAULT_STORE_SETTINGS, getGrammarTexts } from "@/lib/settings";
 
 interface OrderItem {
   id: string;
@@ -50,25 +51,35 @@ interface PublicOrder {
 
 export default function PublicOrderPage({ params }: { params: { token: string } }) {
   const [order, setOrder] = useState<PublicOrder | null>(null);
+  const [settings, setSettings] = useState<StoreSettings>(DEFAULT_STORE_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
   const [copiedBank, setCopiedBank] = useState<string | null>(null);
 
   useEffect(() => {
-    async function loadOrder() {
+    async function loadData() {
       try {
         setLoading(true);
-        const res = await fetch(`/api/public/order/${params.token}`);
-        if (!res.ok) {
-          if (res.status === 404) {
+        const [orderRes, settingsRes] = await Promise.all([
+          fetch(`/api/public/order/${params.token}`),
+          fetch("/api/public/settings").catch(() => null),
+        ]);
+
+        if (settingsRes && settingsRes.ok) {
+          const settingsData = await settingsRes.json();
+          setSettings(settingsData);
+        }
+
+        if (!orderRes.ok) {
+          if (orderRes.status === 404) {
             setError("No encontramos este pedido. Es posible que el enlace haya expirado o no sea válido.");
           } else {
             setError("Ocurrió un error al cargar el pedido.");
           }
           return;
         }
-        const data = await res.json();
+        const data = await orderRes.json();
         setOrder(data);
       } catch (err) {
         setError("Error de conexión. Por favor recarga la página.");
@@ -76,7 +87,7 @@ export default function PublicOrderPage({ params }: { params: { token: string } 
         setLoading(false);
       }
     }
-    loadOrder();
+    loadData();
   }, [params.token]);
 
   const handleCopyText = (text: string, id: string) => {
@@ -85,12 +96,14 @@ export default function PublicOrderPage({ params }: { params: { token: string } 
     setTimeout(() => setCopiedBank(null), 2500);
   };
 
+  const grammar = getGrammarTexts(settings);
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "pendiente_pago":
         return {
           title: "Apartado • Pendiente de Pago",
-          subtitle: "Tus prendas están reservadas temporalmente. Envíanos tu comprobante para programar tu envío.",
+          subtitle: grammar.reservedBanner,
           badgeClass: "bg-amber-100 text-amber-900 border-amber-300",
           icon: Clock,
           color: "text-amber-700",
@@ -114,7 +127,7 @@ export default function PublicOrderPage({ params }: { params: { token: string } 
       case "entregado":
         return {
           title: "Entregado con Éxito",
-          subtitle: "Esperamos que disfrutes mucho tus prendas. ¡Gracias por tu preferencia!",
+          subtitle: `Esperamos que disfrutes mucho tus ${grammar.plural}. ¡Gracias por tu preferencia!`,
           badgeClass: "bg-purple-100 text-purple-900 border-purple-300",
           icon: CheckCircle2,
           color: "text-purple-700",
@@ -161,21 +174,31 @@ export default function PublicOrderPage({ params }: { params: { token: string } 
   const StatusIcon = statusInfo.icon;
 
   const whatsappMessage = encodeURIComponent(
-    `¡Hola Alegra! 💕 Te comparto el comprobante de pago de mi pedido *${order.orderNumber}* a nombre de *${order.customer.fullName}* por un total de *Q${order.totalAmount.toFixed(2)}*.`
+    `¡Hola ${settings.storeName || "Alegra"}! 💕 Te comparto el comprobante de pago de mi pedido *${order.orderNumber}* a nombre de *${order.customer.fullName}* por un total de *Q${order.totalAmount.toFixed(2)}*.`
   );
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 sm:py-10 pb-24 space-y-6">
-      {/* Cabecera de Marca Alegra */}
+      {/* Cabecera de Marca */}
       <header className="text-center space-y-2">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary-container text-secondary-fixed shadow-md shadow-primary/10 mb-1">
-          <ShoppingBag className="w-7 h-7" />
-        </div>
+        {settings.logoUrl ? (
+          <div className="w-16 h-16 mx-auto rounded-2xl overflow-hidden flex items-center justify-center bg-white p-1 mb-1 border border-surface-container-high shadow-sm">
+            <img
+              src={settings.logoUrl}
+              alt={settings.storeName || "Logo"}
+              className="max-w-full max-h-full object-contain"
+            />
+          </div>
+        ) : (
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary-container text-secondary-fixed shadow-md shadow-primary/10 mb-1">
+            <ShoppingBag className="w-7 h-7" />
+          </div>
+        )}
         <h1 className="font-display font-black text-2xl tracking-widest text-primary">
-          ALEGRA
+          {settings.storeName || "ALEGRA"}
         </h1>
         <p className="text-xs font-semibold uppercase tracking-wider text-secondary">
-          Boutique & Live Shopping
+          {settings.tagline || "Boutique & Live Shopping"}
         </p>
       </header>
 
@@ -195,15 +218,15 @@ export default function PublicOrderPage({ params }: { params: { token: string } 
         </div>
       </div>
 
-      {/* Galería de Fotos de Prendas */}
+      {/* Galería de Fotos */}
       <section className="bg-surface-container-lowest rounded-3xl border border-surface-container-high p-4 sm:p-6 shadow-sm space-y-4">
         <div className="flex items-center justify-between border-b border-surface-container-high pb-3">
           <div className="flex items-center gap-2">
             <ImageIcon className="w-4 h-4 text-primary" />
-            <h2 className="font-bold text-sm text-primary">Fotos de tus Prendas</h2>
+            <h2 className="font-bold text-sm text-primary">{grammar.photosHeading}</h2>
           </div>
           <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant">
-            {order.items.length} {order.items.length === 1 ? "prenda" : "prendas"}
+            {order.items.length} {order.items.length === 1 ? grammar.singular : grammar.plural}
           </span>
         </div>
 
@@ -380,69 +403,44 @@ export default function PublicOrderPage({ params }: { params: { token: string } 
           </div>
 
           <div className="space-y-3">
-            {/* Banco Industrial */}
-            <div className="p-3.5 rounded-2xl bg-surface-container-low border border-surface-container-high/70 flex items-center justify-between gap-3">
-              <div className="space-y-0.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
-                  Banco Industrial (BI) • Monetaria
-                </span>
-                <p className="font-mono text-sm font-black text-on-surface">
-                  000-000000-0
-                </p>
-                <p className="text-[10px] text-on-surface-variant">
-                  Nombre: Alegra Boutique
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleCopyText("0000000000", "bi")}
-                className="p-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-primary transition-colors flex items-center gap-1.5 text-xs font-semibold shrink-0"
+            {(settings.bankAccounts && settings.bankAccounts.length > 0
+              ? settings.bankAccounts
+              : DEFAULT_STORE_SETTINGS.bankAccounts
+            ).map((bank) => (
+              <div
+                key={bank.id}
+                className="p-3.5 rounded-2xl bg-surface-container-low border border-surface-container-high/70 flex items-center justify-between gap-3"
               >
-                {copiedBank === "bi" ? (
-                  <>
-                    <Check className="w-4 h-4 text-emerald-600" />
-                    <span className="text-emerald-700">¡Copiado!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-4 h-4" />
-                    <span>Copiar</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* Banrural */}
-            <div className="p-3.5 rounded-2xl bg-surface-container-low border border-surface-container-high/70 flex items-center justify-between gap-3">
-              <div className="space-y-0.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
-                  Banrural • Ahorro / Monetaria
-                </span>
-                <p className="font-mono text-sm font-black text-on-surface">
-                  000-000000-0
-                </p>
-                <p className="text-[10px] text-on-surface-variant">
-                  Nombre: Alegra Boutique
-                </p>
+                <div className="space-y-0.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
+                    {bank.bankName} • {bank.accountType}
+                  </span>
+                  <p className="font-mono text-sm font-black text-on-surface">
+                    {bank.accountNumber}
+                  </p>
+                  <p className="text-[10px] text-on-surface-variant">
+                    Nombre: {bank.accountHolder}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopyText(bank.accountNumber, bank.id)}
+                  className="p-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-primary transition-colors flex items-center gap-1.5 text-xs font-semibold shrink-0"
+                >
+                  {copiedBank === bank.id ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-600" />
+                      <span className="text-emerald-700">¡Copiado!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      <span>Copiar</span>
+                    </>
+                  )}
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => handleCopyText("0000000000", "banrural")}
-                className="p-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-primary transition-colors flex items-center gap-1.5 text-xs font-semibold shrink-0"
-              >
-                {copiedBank === "banrural" ? (
-                  <>
-                    <Check className="w-4 h-4 text-emerald-600" />
-                    <span className="text-emerald-700">¡Copiado!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-4 h-4" />
-                    <span>Copiar</span>
-                  </>
-                )}
-              </button>
-            </div>
+            ))}
           </div>
         </section>
       )}

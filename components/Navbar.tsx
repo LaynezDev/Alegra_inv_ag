@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { 
@@ -11,11 +12,32 @@ import {
   Radio,
   Layers,
   Lock,
-  LogOut
+  LogOut,
+  SlidersHorizontal
 } from "lucide-react";
+import { StoreSettings, DEFAULT_STORE_SETTINGS } from "@/lib/settings";
 
 export default function Navbar() {
   const pathname = usePathname();
+  const [settings, setSettings] = useState<StoreSettings>(DEFAULT_STORE_SETTINGS);
+
+  useEffect(() => {
+    if (
+      pathname === "/acceso" ||
+      pathname === "/not-found" ||
+      pathname.startsWith("/p/") ||
+      pathname.startsWith("/c/")
+    ) {
+      return;
+    }
+
+    fetch("/api/settings")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setSettings(data);
+      })
+      .catch(() => {});
+  }, [pathname]);
 
   const navLinks = [
     {
@@ -75,15 +97,25 @@ export default function Navbar() {
           <div className="flex items-center justify-between h-16">
             {/* Logo y Marca */}
             <Link href="/pos" className="flex items-center gap-3 group">
-              <div className="w-10 h-10 rounded-xl bg-primary-container flex items-center justify-center text-secondary-fixed shadow-sm transition-transform group-hover:scale-105">
-                <ShoppingBag className="w-5 h-5" />
-              </div>
+              {settings.logoUrl ? (
+                <div className="w-10 h-10 rounded-xl bg-white border border-surface-container-high flex items-center justify-center p-1 overflow-hidden shadow-sm transition-transform group-hover:scale-105">
+                  <img
+                    src={settings.logoUrl}
+                    alt={settings.storeName || "Logo"}
+                    className="max-w-full max-h-full object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="w-10 h-10 rounded-xl bg-primary-container flex items-center justify-center text-secondary-fixed shadow-sm transition-transform group-hover:scale-105">
+                  <ShoppingBag className="w-5 h-5" />
+                </div>
+              )}
               <div className="flex flex-col">
                 <span className="font-display font-bold text-lg tracking-widest text-primary leading-tight">
-                  ALEGRA
+                  {settings.storeName || "ALEGRA"}
                 </span>
                 <span className="text-[10px] font-semibold tracking-wider uppercase text-secondary leading-tight">
-                  Inventario & Live POS
+                  {settings.tagline || "Inventario & Live POS"}
                 </span>
               </div>
             </Link>
@@ -144,6 +176,20 @@ export default function Navbar() {
                 </span>
                 <span>Sistema Conectado</span>
               </div>
+
+              {/* Acceso a Configuración de la Tienda */}
+              <Link
+                href="/configuracion"
+                title="Configuración de la Tienda"
+                className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all shadow-xs ${
+                  pathname === "/configuracion"
+                    ? "bg-primary text-on-primary border-primary"
+                    : "border-surface-container text-on-surface-variant hover:text-primary hover:border-primary/30 hover:bg-surface-container"
+                }`}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Config</span>
+              </Link>
 
               <button
                 type="button"

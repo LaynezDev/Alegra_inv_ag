@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { playScanSuccessSound, playScanErrorSound } from "@/lib/sound";
+import { StoreSettings, DEFAULT_STORE_SETTINGS, getGrammarTexts } from "@/lib/settings";
 
 interface Customer {
   id: number | string;
@@ -77,6 +78,17 @@ export default function PosLivePage() {
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [copiedWhatsapp, setCopiedWhatsapp] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [settings, setSettings] = useState<StoreSettings>(DEFAULT_STORE_SETTINGS);
+
+  // Cargar configuración de tienda
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setSettings(data);
+      })
+      .catch(() => {});
+  }, []);
 
   // 1. Cargar comandas guardadas en localStorage al montar
   useEffect(() => {
@@ -380,15 +392,17 @@ export default function PosLivePage() {
 
   // Generar texto para WhatsApp con enlace a fotos
   const getWhatsappReceiptMessage = (o: any) => {
-    let message = `✨ *ALEGRA - RECIBO DE COMPRA* ✨\n`;
+    const grammar = getGrammarTexts(settings);
+    const brand = settings.storeName || "ALEGRA";
+    let message = `✨ *${brand} - RECIBO DE COMPRA* ✨\n`;
     message += `Comanda: *${o.orderNumber}*\n`;
     message += `Cliente: *${o.customer.fullName}*\n`;
     message += `Fecha: ${new Date(o.createdAt).toLocaleString("es-GT")}\n`;
     message += `━━━━━━━━━━━━━━━━━━━━━\n`;
-    message += `*DETALLE DE PRENDAS:*\n`;
+    message += `*DETALLE DE ${grammar.capPlural.toUpperCase()}:*\n`;
 
     o.items.forEach((item: any, idx: number) => {
-      const name = item.product?.name || item.name || "Prenda";
+      const name = item.product?.name || item.name || grammar.capSingular;
       message += `${idx + 1}. ${name}\n`;
       if (Number(item.discountAmount) > 0) {
         message += `   Precio: Q${Number(item.originalPrice).toFixed(2)} - Desc: Q${Number(item.discountAmount).toFixed(2)} = *Q${Number(item.finalPrice).toFixed(2)}*\n`;
@@ -405,10 +419,10 @@ export default function PosLivePage() {
     message += `*TOTAL A PAGAR: Q${Number(o.totalAmount).toFixed(2)}*\n`;
     message += `Estado: *PENDIENTE DE PAGO (Apartado)* ⏳\n\n`;
 
-    // Enlace público al visor de fotos de prendas del cliente
+    // Enlace público al visor de fotos de productos del cliente
     const origin = typeof window !== "undefined" ? window.location.origin : "";
     const shareUrl = `${origin}/p/${o.shareToken || o.id}`;
-    message += `👗 *Ver fotos de tus prendas aquí:*\n`;
+    message += `🛍️ *Ver fotos de tus ${grammar.plural} aquí:*\n`;
     message += `👉 ${shareUrl}\n\n`;
 
     message += `💳 *Datos de Pago:*\n`;
@@ -416,7 +430,7 @@ export default function PosLivePage() {
     const depName = o.customer.department?.name || o.customer.departmentName || "";
     const munName = o.customer.municipality?.name || o.customer.municipalityName || "";
     message += `📍 *Entrega:* ${o.customer.fullAddress}, ${munName}, ${depName}\n`;
-    message += `¡Muchas gracias por tu compra en Alegra! 💕`;
+    message += `¡Muchas gracias por tu compra en ${brand}! 💕`;
 
     return message;
   };
