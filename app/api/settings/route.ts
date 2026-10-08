@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getStoreSettings, updateStoreSettings } from "@/lib/firestore-service";
 
-export async function GET() {
+export const dynamic = "force-dynamic";
+
+export async function GET(req: Request) {
   try {
     const settings = await getStoreSettings();
     return NextResponse.json(settings);
@@ -14,7 +16,7 @@ export async function GET() {
   }
 }
 
-export async function PUT(req: NextRequest) {
+async function handleSaveSettings(req: Request) {
   try {
     const body = await req.json();
     const updated = await updateStoreSettings(body);
@@ -26,4 +28,12 @@ export async function PUT(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function POST(req: Request) {
+  return handleSaveSettings(req);
+}
+
+export async function PUT(req: Request) {
+  return handleSaveSettings(req);
 }
