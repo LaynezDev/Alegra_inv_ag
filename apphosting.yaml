@@ -27,3 +27,5 @@ env:
     value: "42473123156"
   - variable: NEXT_PUBLIC_FIREBASE_APP_ID
     value: "1:42473123156:web:ecabbb477c20b5dcb8acc1"
+  - variable: ADMIN_PIN
+    value: "1219"

@@ -9,7 +9,9 @@ import {
   ClipboardList, 
   BarChart3, 
   Radio,
-  Layers
+  Layers,
+  Lock,
+  LogOut
 } from "lucide-react";
 
 export default function Navbar() {
@@ -43,6 +45,26 @@ export default function Navbar() {
       icon: BarChart3,
     },
   ];
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      window.location.href = "/acceso";
+    } catch (err) {
+      console.error("Error al cerrar sesión:", err);
+      window.location.href = "/acceso";
+    }
+  };
+
+  // Ocultar Navbar por completo en pantalla de acceso, páginas de error o vistas públicas
+  if (
+    pathname === "/acceso" ||
+    pathname === "/not-found" ||
+    pathname.startsWith("/p/") ||
+    pathname.startsWith("/catalogo/")
+  ) {
+    return null;
+  }
 
   return (
     <>
@@ -112,15 +134,25 @@ export default function Navbar() {
               })}
             </nav>
 
-            {/* Quick Status Pill */}
-            <div className="hidden lg:flex items-center gap-2.5">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container-low border border-surface-container text-xs text-on-surface-variant font-medium">
+            {/* Acciones de Cabecera (Status y Bloqueo) */}
+            <div className="flex items-center gap-2 sm:gap-2.5">
+              <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container-low border border-surface-container text-xs text-on-surface-variant font-medium">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
                 <span>Sistema Conectado</span>
               </div>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                title="Bloquear terminal (Cerrar sesión)"
+                className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border border-surface-container text-xs font-semibold text-on-surface-variant hover:text-error hover:border-error/30 hover:bg-error-container/20 transition-all shadow-xs"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Bloquear</span>
+              </button>
             </div>
           </div>
         </div>

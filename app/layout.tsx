@@ -1,17 +1,23 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
+import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: "Alegra - Plataforma de Inventario, POS Live y Control de Inversión",
   description: "Sistema de gestión integral para paquetes, transmisiones en vivo, comandas y cobranza para la tienda Alegra",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const cookieStore = cookies();
+  const sessionToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const isAuthenticated = await verifySessionToken(sessionToken);
+
   return (
     <html lang="es">
       <head>
@@ -27,8 +33,8 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen bg-background font-sans text-on-surface antialiased flex flex-col">
-        <Navbar />
-        <main className="flex-1 w-full max-w-[1600px] mx-auto p-3 sm:p-5 lg:p-6 pb-20 md:pb-6">
+        {isAuthenticated && <Navbar />}
+        <main className={`flex-1 w-full max-w-[1600px] mx-auto ${isAuthenticated ? "p-3 sm:p-5 lg:p-6 pb-20 md:pb-6" : "p-4"}`}>
           {children}
         </main>
       </body>
