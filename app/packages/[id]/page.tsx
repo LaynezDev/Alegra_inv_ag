@@ -29,6 +29,7 @@ import BarcodeDisplay from "@/components/BarcodeDisplay";
 import BarcodePrintModal from "@/components/BarcodePrintModal";
 import CatalogShareModal from "@/components/CatalogShareModal";
 import { formatCurrency, formatWeight, calculateCostByWeight } from "@/lib/utils";
+import { compressImages } from "@/lib/image-compressor";
 
 interface Product {
   id: number | string;
@@ -175,11 +176,20 @@ export default function PackageDetailPage() {
     setEditPhotos((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Función para subir archivos al servidor
+  // Función para subir archivos al servidor con compresión automática
   const uploadFilesToServer = async (files: File[]): Promise<string[]> => {
     if (files.length === 0) return [];
+
+    // Redimensionar y comprimir fotos en el navegador (1200px max, calidad 82%, WebP)
+    const optimizedFiles = await compressImages(files, {
+      maxWidth: 1200,
+      maxHeight: 1200,
+      quality: 0.82,
+      preferredFormat: "image/webp",
+    });
+
     const formData = new FormData();
-    files.forEach((f) => formData.append("files", f));
+    optimizedFiles.forEach((f) => formData.append("files", f));
 
     const res = await fetch("/api/upload", {
       method: "POST",
@@ -802,7 +812,7 @@ export default function PackageDetailPage() {
                 {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 <span>
                   {uploadingImages
-                    ? "Subiendo imágenes..."
+                    ? "Optimizando y subiendo fotos..."
                     : submitting
                     ? "Guardando..."
                     : "Guardar Producto"}

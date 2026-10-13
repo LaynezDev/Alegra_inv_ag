@@ -42,8 +42,8 @@ export async function POST(req: Request) {
         const bytes = await file.arrayBuffer();
         const buffer = Buffer.from(bytes);
 
-        const ext = path.extname(file.name) || ".jpg";
-        const cleanExt = ext.toLowerCase().replace(/[^a-z0-9.]/g, "") || ".jpg";
+        const rawExt = path.extname(file.name) || (file.type === "image/webp" ? ".webp" : ".jpg");
+        const cleanExt = rawExt.toLowerCase().replace(/[^a-z0-9.]/g, "") || ".jpg";
         const filename = `prod_${Date.now()}_${Math.random().toString(36).substring(2, 8)}${cleanExt}`;
         const destination = `products/${filename}`;
         const fileRef = bucket.file(destination);
@@ -52,7 +52,8 @@ export async function POST(req: Request) {
 
         await fileRef.save(buffer, {
           metadata: {
-            contentType: file.type || "image/jpeg",
+            contentType: file.type || "image/webp",
+            cacheControl: "public, max-age=31536000, immutable",
             metadata: {
               firebaseStorageDownloadTokens: token,
             },

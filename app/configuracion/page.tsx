@@ -10,6 +10,7 @@ import {
   DEFAULT_STORE_SETTINGS, 
   getGrammarTexts 
 } from "@/lib/settings";
+import { compressImage } from "@/lib/image-compressor";
 import { 
   Save, 
   ArrowLeft, 
@@ -93,8 +94,17 @@ export default function ConfiguracionPage() {
 
     try {
       setUploadingImage(true);
+
+      // Comprimir logotipo (800x800 max, calidad 88%, WebP)
+      const optimizedLogo = await compressImage(file, {
+        maxWidth: 800,
+        maxHeight: 800,
+        quality: 0.88,
+        preferredFormat: "image/webp",
+      });
+
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", optimizedLogo);
 
       const res = await fetch("/api/upload", {
         method: "POST",
