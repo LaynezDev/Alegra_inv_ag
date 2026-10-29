@@ -1,0 +1,21 @@
+rules_version = '2';
+
+// Reglas de seguridad para Cloud Storage de AlegraGT
+// Bucket: alegragt-66b94.firebasestorage.app
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // 1. Fotografías de productos, fardos y logotipo de la tienda
+    // Lectura pública: Clientes y personal pueden ver las fotos (en catálogos, pedidos compartidos y POS)
+    // Escritura restringida: Solo el servidor backend (vía Firebase Admin SDK) puede subir, editar o borrar
+    match /products/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // 2. Cualquier otra carpeta o archivo queda protegido y denegado por defecto
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
