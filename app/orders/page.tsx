@@ -6,20 +6,24 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import { StoreSettings, DEFAULT_STORE_SETTINGS, getGrammarTexts } from "@/lib/settings";
 
 interface OrderItem {
-  id: number;
+  id: number | string;
+  productId?: number | string;
   originalPrice: number;
   discountAmount: number;
   finalPrice: number;
-  product: {
-    id: number;
-    barcode: string;
-    name: string;
-    status: string;
+  product?: {
+    id?: number | string;
+    barcode?: string;
+    name?: string;
+    status?: string;
+    photos?: any;
   };
+  name?: string;
+  barcode?: string;
 }
 
 interface Payment {
-  id: number;
+  id: number | string;
   referenceNumber: string;
   paymentMethod: string;
   amount: number;
@@ -28,7 +32,7 @@ interface Payment {
 }
 
 interface Order {
-  id: number;
+  id: number | string;
   orderNumber: string;
   status: string;
   subtotal: number;
@@ -39,24 +43,40 @@ interface Order {
   notes: string | null;
   createdAt: string;
   customer: {
-    id: number;
+    id?: number | string;
     fullName: string;
     phonePrimary: string;
     tiktokUsername: string | null;
     instagramUsername: string | null;
     fullAddress: string;
-    department: { name: string };
-    municipality: { name: string };
+    department?: { name: string };
+    municipality?: { name: string };
   };
   items: OrderItem[];
   payments: Payment[];
 }
 
 interface AvailableProduct {
-  id: number;
+  id: number | string;
   barcode: string;
   name: string;
   salePrice: number;
+  photos?: any;
+  package?: { code?: string; packageType?: string };
+}
+
+function getProductThumbnail(photos: any): string | null {
+  if (!photos) return null;
+  if (Array.isArray(photos) && photos.length > 0) return photos[0];
+  if (typeof photos === "string") {
+    try {
+      const parsed = JSON.parse(photos);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed[0];
+    } catch {
+      if (photos.startsWith("http")) return photos;
+    }
+  }
+  return null;
 }
 
 export default function OrdersPage() {
@@ -83,13 +103,21 @@ export default function OrdersPage() {
 
   // Formulario Agregar Producto Adicional
   const [availableProducts, setAvailableProducts] = useState<AvailableProduct[]>([]);
-  const [selectedProductId, setSelectedProductId] = useState("");
+  const [productSearchQuery, setProductSearchQuery] = useState("");
+  const [isSearchingProducts, setIsSearchingProducts] = useState(false);
+  const [selectedProductId, setSelectedProductId] = useState<string | number>("");
+  const [selectedProduct, setSelectedProduct] = useState<AvailableProduct | null>(null);
   const [addItemDiscount, setAddItemDiscount] = useState("");
   const [submittingAddProduct, setSubmittingAddProduct] = useState(false);
+
+  // Estado para eliminar prenda de orden
+  const [deletingItemId, setDeletingItemId] = useState<string | number | null>(null);
 
   // Mensajes de error
   const [actionError, setActionError] = useState("");
   const [settings, setSettings] = useState<StoreSettings>(DEFAULT_STORE_SETTINGS);
+
+  const grammar = useMemo(() => getGrammarTexts(settings), [settings]);
 
   useEffect(() => {
     fetch("/api/settings")
@@ -119,17 +147,35 @@ export default function OrdersPage() {
     fetchOrders(statusFilter);
   }, [statusFilter]);
 
-  const fetchAvailableProducts = async () => {
+  const fetchAvailableProducts = async (query = "") => {
     try {
-      const res = await fetch("/api/products/search");
+      setIsSearchingProducts(true);
+      const url = query.trim()
+        ? `/api/products/search?q=${encodeURIComponent(query.trim())}`
+        : "/api/products/search";
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
-        setAvailableProducts(data);
+        setAvailableProducts(Array.isArray(data) ? data : []);
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsSearchingProducts(false);
     }
   };
+
+  // Filtrado reactivo de productos disponibles
+  const filteredAvailableProducts = useMemo(() => {
+    if (!productSearchQuery.trim()) return availableProducts;
+    const q = productSearchQuery.trim().toLowerCase();
+    return availableProducts.filter((p) => {
+      const matchBarcode = p.barcode?.toLowerCase().includes(q);
+      const matchName = p.name?.toLowerCase().includes(q);
+      const matchPackage = p.package?.code?.toLowerCase().includes(q);
+      return matchBarcode || matchName || matchPackage;
+    });
+  }, [availableProducts, productSearchQuery]);
 
   // Métricas dinámicas calculadas
   const metrics = useMemo(() => {
@@ -231,6 +277,8 @@ export default function OrdersPage() {
   const handleOpenAddProductModal = (order: Order) => {
     setSelectedOrder(order);
     setSelectedProductId("");
+    setSelectedProduct(null);
+    setProductSearchQuery("");
     setAddItemDiscount("");
     setActionError("");
     fetchAvailableProducts();
@@ -257,10 +305,14 @@ export default function OrdersPage() {
 
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || "Error al agregar producto");
+        throw new Error(err.error || `Error al agregar ${grammar.singular}`);
       }
 
       setIsAddProductModalOpen(false);
+      setSelectedProductId("");
+      setSelectedProduct(null);
+      setProductSearchQuery("");
+      setAddItemDiscount("");
       fetchOrders(statusFilter);
     } catch (err: any) {
       setActionError(err.message);
@@ -269,8 +321,66 @@ export default function OrdersPage() {
     }
   };
 
+  // Eliminar producto de una orden y retornar stock a disponible
+  const handleDeleteOrderItem = async (order: Order, item: OrderItem) => {
+    const itemName = item.product?.name || item.name || grammar.capSingular;
+    const itemBarcode = item.product?.barcode || item.barcode || "";
+
+    const confirm = window.confirm(
+      `¿Deseas eliminar "${itemName}"${itemBarcode ? ` (${itemBarcode})` : ""} de la comanda ${order.orderNumber}?\n\n${grammar.articleSingular.toUpperCase()} ${grammar.singular} volverá a estar disponible en el inventario.`
+    );
+    if (!confirm) return;
+
+    try {
+      setDeletingItemId(item.id);
+      const res = await fetch(`/api/orders/${order.id}/remove-item`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: item.productId || item.product?.id,
+          itemId: item.id,
+          barcode: itemBarcode,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || `Error al eliminar ${grammar.singular} de la orden`);
+      }
+
+      const result = await res.json();
+
+      // Sincronizar modal de recibo si está abierto
+      if (selectedOrder && String(selectedOrder.id) === String(order.id)) {
+        if (result.order) {
+          setSelectedOrder(result.order);
+        } else {
+          setSelectedOrder((prev) => {
+            if (!prev) return null;
+            const remaining = prev.items.filter((it) => it.id !== item.id);
+            const newTotal = result.totalAmount ?? prev.totalAmount;
+            return {
+              ...prev,
+              items: remaining,
+              subtotal: result.subtotal ?? prev.subtotal,
+              totalDiscount: result.totalDiscount ?? prev.totalDiscount,
+              totalAmount: newTotal,
+              balanceDue: Math.max(0, newTotal - prev.totalPaid),
+            };
+          });
+        }
+      }
+
+      await fetchOrders(statusFilter);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setDeletingItemId(null);
+    }
+  };
+
   // Cancelar orden (libera stock a disponible)
-  const handleCancelOrder = async (orderId: number) => {
+  const handleCancelOrder = async (orderId: number | string) => {
     const confirm = window.confirm(
       "¿Estás seguro de cancelar esta orden? Los productos apartados se liberarán de inmediato y volverán a estar disponibles en stock."
     );
@@ -293,7 +403,7 @@ export default function OrdersPage() {
   };
 
   // Transicionar estado (ej. Enviado, Entregado)
-  const handleUpdateStatus = async (orderId: number, nextStatus: string) => {
+  const handleUpdateStatus = async (orderId: number | string, nextStatus: string) => {
     let confirmMsg = `¿Deseas marcar la orden como ${nextStatus.toUpperCase()}?`;
     if (nextStatus === "entregado") {
       confirmMsg = "Al marcar como ENTREGADO, la venta concluye formalmente. ¿Deseas continuar?";
@@ -838,41 +948,73 @@ export default function OrdersPage() {
                   {/* Columna 2: Prendas Apartadas (5 cols) */}
                   <div className="lg:col-span-5 flex flex-col gap-2">
                     <div className="flex items-center justify-between text-xs font-semibold text-primary">
-                      <span>Prendas Apartadas ({order.items.length})</span>
+                      <span>{grammar.capPlural} Apartadas ({order.items.length})</span>
                       <span className="text-outline">Total Items: {order.items.length}</span>
                     </div>
 
                     <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto pr-1">
-                      {order.items.map((item) => (
-                        <div
-                          key={item.id}
-                          className="flex items-center justify-between p-2.5 rounded-xl bg-surface-container-low text-xs border border-surface-container-high/60"
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <span className="w-6 h-6 rounded-lg bg-surface-container-highest text-primary font-mono text-[11px] flex items-center justify-center font-bold shrink-0">
-                              1x
-                            </span>
-                            <div className="min-w-0">
-                              <span className="text-primary font-medium block truncate">
-                                {item.product.name}
+                      {order.items.map((item) => {
+                        const itemName = item.product?.name || item.name || grammar.capSingular;
+                        const itemBarcode = item.product?.barcode || item.barcode || "";
+                        const isDeleting = deletingItemId === item.id;
+
+                        return (
+                          <div
+                            key={item.id}
+                            className="flex items-center justify-between p-2.5 rounded-xl bg-surface-container-low text-xs border border-surface-container-high/60 group hover:border-surface-container-high transition-all"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className="w-6 h-6 rounded-lg bg-surface-container-highest text-primary font-mono text-[11px] flex items-center justify-center font-bold shrink-0">
+                                1x
                               </span>
-                              <span className="text-outline text-[11px] font-mono">
-                                {item.product.barcode}
-                              </span>
+                              <div className="min-w-0">
+                                <span className="text-primary font-medium block truncate">
+                                  {itemName}
+                                </span>
+                                {itemBarcode && (
+                                  <span className="text-outline text-[11px] font-mono">
+                                    {itemBarcode}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0 ml-2">
+                              <div className="text-right">
+                                <span className="font-bold text-primary block">
+                                  {formatCurrency(item.finalPrice)}
+                                </span>
+                                {Number(item.discountAmount) > 0 && (
+                                  <span className="text-[10px] text-error font-semibold">
+                                    -{formatCurrency(item.discountAmount)} desc.
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Botón Eliminar Prenda de la Orden */}
+                              {canAddItems && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteOrderItem(order, item)}
+                                  disabled={isDeleting}
+                                  title={`Eliminar ${grammar.singular} de la orden y devolver a disponible`}
+                                  className="p-1 rounded-lg text-outline hover:text-error hover:bg-error-container/30 transition-all active:scale-90 disabled:opacity-50"
+                                >
+                                  {isDeleting ? (
+                                    <span className="material-symbols-outlined text-sm animate-spin">
+                                      progress_activity
+                                    </span>
+                                  ) : (
+                                    <span className="material-symbols-outlined text-sm">
+                                      delete
+                                    </span>
+                                  )}
+                                </button>
+                              )}
                             </div>
                           </div>
-                          <div className="text-right shrink-0">
-                            <span className="font-bold text-primary block">
-                              {formatCurrency(item.finalPrice)}
-                            </span>
-                            {Number(item.discountAmount) > 0 && (
-                              <span className="text-[10px] text-error font-semibold">
-                                -{formatCurrency(item.discountAmount)} desc.
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
 
                     {/* Historial de Boletas Verificadas */}
@@ -917,7 +1059,7 @@ export default function OrdersPage() {
                   <div className="lg:col-span-3 flex flex-col justify-between p-3.5 rounded-2xl bg-surface-container-low border border-surface-container-high">
                     <div className="flex flex-col gap-1.5 text-xs text-outline">
                       <div className="flex justify-between">
-                        <span>Subtotal prendas:</span>
+                        <span>Subtotal {grammar.plural}:</span>
                         <span className="font-semibold text-primary">
                           {formatCurrency(order.subtotal)}
                         </span>
@@ -994,12 +1136,12 @@ export default function OrdersPage() {
                         onClick={() => handleOpenAddProductModal(order)}
                         type="button"
                         className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-surface-container text-primary text-xs font-semibold hover:bg-surface-container-high transition-colors"
-                        title="Agregar Prenda Extra del Live"
+                        title={`Agregar ${grammar.capSingular} Extra del Live`}
                       >
                         <span className="material-symbols-outlined text-sm text-secondary">
                           add_circle
                         </span>
-                        <span>+ Prenda Extra</span>
+                        <span>+ {grammar.capSingular} Extra</span>
                       </button>
                     )}
                   </div>
@@ -1219,20 +1361,24 @@ export default function OrdersPage() {
 
       {/* Modal 2: Agregar Prenda Extra del Live */}
       {isAddProductModalOpen && selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="bg-surface-container-lowest rounded-2xl max-w-md w-full shadow-2xl border border-surface-container-high overflow-hidden animate-in fade-in-50 zoom-in-95">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-surface-container-lowest rounded-2xl max-w-lg w-full shadow-2xl border border-surface-container-high overflow-hidden animate-in fade-in-50 zoom-in-95 my-6">
             <div className="bg-primary p-5 text-on-primary flex justify-between items-center">
               <div>
-                <h3 className="font-headline-md text-base font-bold text-on-primary">
-                  Agregar Prenda Adicional
+                <h3 className="font-headline-md text-base font-bold text-on-primary flex items-center gap-2">
+                  <span className="material-symbols-outlined text-secondary-fixed text-lg">
+                    add_shopping_cart
+                  </span>
+                  Agregar {grammar.capSingular} Adicional
                 </h3>
                 <p className="text-xs text-secondary-fixed">
                   Comanda {selectedOrder.orderNumber} • {selectedOrder.customer.fullName}
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => setIsAddProductModalOpen(false)}
-                className="text-on-primary-container hover:text-on-primary text-xl font-bold"
+                className="text-on-primary-container hover:text-on-primary text-xl font-bold p-1 leading-none"
               >
                 ✕
               </button>
@@ -1240,30 +1386,205 @@ export default function OrdersPage() {
 
             <form onSubmit={handleSubmitAddProduct} className="p-6 space-y-4">
               {actionError && (
-                <div className="p-3 text-xs bg-error-container text-on-error-container border border-error/20 rounded-xl font-medium">
-                  {actionError}
+                <div className="p-3 text-xs bg-error-container text-on-error-container border border-error/20 rounded-xl font-medium flex items-center gap-2">
+                  <span className="material-symbols-outlined text-sm shrink-0">error</span>
+                  <span>{actionError}</span>
                 </div>
               )}
 
+              {/* Buscador de Producto por Código o Texto */}
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1.5">
-                  Seleccionar Prenda Disponible en Stock *
-                </label>
-                <select
-                  required
-                  value={selectedProductId}
-                  onChange={(e) => setSelectedProductId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-sm bg-surface-container-low border border-surface-container-high text-primary rounded-xl focus:ring-2 focus:ring-secondary/50 focus:border-secondary outline-hidden transition-all cursor-pointer"
-                >
-                  <option value="">Selecciona una prenda disponible...</option>
-                  {availableProducts.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.barcode}) - {formatCurrency(p.salePrice)}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-secondary">
+                    Buscar {grammar.capSingular} Disponible *
+                  </label>
+                  <span className="text-[11px] text-outline font-medium">
+                    {filteredAvailableProducts.length} disponibles
+                  </span>
+                </div>
+
+                <div className="relative">
+                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg pointer-events-none">
+                    search
+                  </span>
+                  <input
+                    type="text"
+                    value={productSearchQuery}
+                    onChange={(e) => setProductSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        const q = productSearchQuery.trim().toLowerCase();
+                        if (!q) return;
+                        // Coincidencia exacta de código de barras
+                        const exact = filteredAvailableProducts.find(
+                          (p) => p.barcode?.toLowerCase() === q
+                        );
+                        if (exact) {
+                          setSelectedProductId(exact.id);
+                          setSelectedProduct(exact);
+                          return;
+                        }
+                        // Si hay un único resultado filtrado, seleccionarlo
+                        if (filteredAvailableProducts.length === 1) {
+                          setSelectedProductId(filteredAvailableProducts[0].id);
+                          setSelectedProduct(filteredAvailableProducts[0]);
+                          return;
+                        }
+                        // Búsqueda profunda en servidor
+                        fetchAvailableProducts(productSearchQuery);
+                      }
+                    }}
+                    placeholder={`Escanear código (PRD-...) o escribir nombre...`}
+                    className="w-full pl-9 pr-9 py-2.5 text-sm bg-surface-container-low border border-surface-container-high text-primary rounded-xl focus:ring-2 focus:ring-secondary/50 focus:border-secondary outline-hidden transition-all placeholder:text-outline"
+                    autoFocus
+                  />
+                  {productSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProductSearchQuery("");
+                        fetchAvailableProducts("");
+                      }}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-outline hover:text-primary text-sm p-1"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-outline mt-1">
+                  💡 Puedes escanear con la pistola de códigos o escribir palabras clave y presionar Enter.
+                </p>
               </div>
 
+              {/* Lista filtrable de productos */}
+              <div className="space-y-1.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-outline block">
+                  Resultados ({filteredAvailableProducts.length}):
+                </span>
+
+                <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1 border border-surface-container-high/60 rounded-xl p-1.5 bg-surface-container-lowest">
+                  {isSearchingProducts ? (
+                    <div className="py-8 text-center text-outline text-xs flex items-center justify-center gap-2">
+                      <span className="material-symbols-outlined text-sm animate-spin">sync</span>
+                      Buscando {grammar.plural}...
+                    </div>
+                  ) : filteredAvailableProducts.length === 0 ? (
+                    <div className="py-8 text-center text-outline text-xs flex flex-col items-center justify-center gap-1">
+                      <span className="material-symbols-outlined text-2xl text-outline/60">
+                        inventory_2
+                      </span>
+                      <span>No se encontraron {grammar.plural} disponibles</span>
+                      {productSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => fetchAvailableProducts(productSearchQuery)}
+                          className="mt-1 text-primary text-xs underline font-semibold"
+                        >
+                          Buscar en todo el inventario
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    filteredAvailableProducts.map((p) => {
+                      const isSelected = String(selectedProductId) === String(p.id);
+                      const thumb = getProductThumbnail(p.photos);
+                      return (
+                        <div
+                          key={p.id}
+                          onClick={() => {
+                            setSelectedProductId(p.id);
+                            setSelectedProduct(p);
+                          }}
+                          className={`flex items-center justify-between p-2 rounded-xl cursor-pointer transition-all border ${
+                            isSelected
+                              ? "bg-secondary/15 border-secondary shadow-xs ring-1 ring-secondary"
+                              : "bg-surface-container-low hover:bg-surface-container border-surface-container-high/60"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {thumb ? (
+                              <img
+                                src={thumb}
+                                alt={p.name}
+                                className="w-10 h-10 rounded-lg object-cover bg-surface-container-highest border border-surface-container-high shrink-0"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-primary shrink-0 border border-surface-container-high">
+                                <span className="material-symbols-outlined text-base text-secondary">
+                                  checkroom
+                                </span>
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <span className="text-primary font-semibold text-xs block truncate">
+                                {p.name}
+                              </span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-outline text-[11px] font-mono">
+                                  {p.barcode}
+                                </span>
+                                {p.package?.code && (
+                                  <span className="px-1.5 py-0.2 rounded bg-surface-container-high text-[10px] text-outline font-mono">
+                                    {p.package.code}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2.5 shrink-0 ml-2">
+                            <span className="font-bold text-primary text-xs">
+                              {formatCurrency(p.salePrice)}
+                            </span>
+                            <button
+                              type="button"
+                              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                                isSelected
+                                  ? "bg-secondary text-primary shadow-xs"
+                                  : "bg-surface-container-highest hover:bg-primary hover:text-on-primary text-primary"
+                              }`}
+                            >
+                              {isSelected ? "✓ Elegido" : "Elegir"}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Vista previa de Prenda Seleccionada */}
+              {selectedProduct && (
+                <div className="p-3 rounded-xl bg-secondary-fixed/40 border border-secondary/30 flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="material-symbols-outlined text-secondary text-lg shrink-0">
+                      check_circle
+                    </span>
+                    <div className="min-w-0">
+                      <span className="text-xs font-bold text-primary block truncate">
+                        {selectedProduct.name}
+                      </span>
+                      <span className="text-[11px] font-mono text-outline">
+                        {selectedProduct.barcode} • Base: {formatCurrency(selectedProduct.salePrice)}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedProductId("");
+                      setSelectedProduct(null);
+                    }}
+                    className="text-xs text-error font-bold uppercase tracking-wider hover:underline ml-2 shrink-0"
+                  >
+                    Quitar
+                  </button>
+                </div>
+              )}
+
+              {/* Descuento por Monto Opcional y Resumen */}
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1.5">
                   Descuento por Monto (Q) (Opcional)
@@ -1277,6 +1598,24 @@ export default function OrdersPage() {
                   onChange={(e) => setAddItemDiscount(e.target.value)}
                   className="w-full px-3.5 py-2.5 text-sm bg-surface-container-low border border-surface-container-high text-primary rounded-xl focus:ring-2 focus:ring-secondary/50 focus:border-secondary outline-hidden transition-all placeholder:text-outline"
                 />
+
+                {selectedProduct && (
+                  <div className="mt-2 p-2.5 rounded-xl bg-surface-container-low border border-surface-container-high/60 flex items-center justify-between text-xs">
+                    <span className="text-outline">Monto a agregar al pedido:</span>
+                    <div className="flex items-center gap-2">
+                      {parseFloat(addItemDiscount) > 0 && (
+                        <span className="line-through text-outline">
+                          {formatCurrency(selectedProduct.salePrice)}
+                        </span>
+                      )}
+                      <span className="font-bold text-emerald-700 text-sm">
+                        {formatCurrency(
+                          Math.max(0, selectedProduct.salePrice - (parseFloat(addItemDiscount) || 0))
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-3 pt-3 border-t border-surface-container-high">
@@ -1295,7 +1634,9 @@ export default function OrdersPage() {
                   {submittingAddProduct && (
                     <span className="material-symbols-outlined text-sm animate-spin">sync</span>
                   )}
-                  {submittingAddProduct ? "Agregando..." : "Agregar a la Orden"}
+                  {submittingAddProduct
+                    ? "Agregando..."
+                    : `Agregar ${grammar.capSingular} a la Orden`}
                 </button>
               </div>
             </form>
@@ -1353,25 +1694,63 @@ export default function OrdersPage() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-left text-outline border-b border-surface-container-high">
-                      <th className="pb-1 font-bold uppercase">Prenda</th>
+                      <th className="pb-1 font-bold uppercase">{grammar.capSingular}</th>
                       <th className="pb-1 text-center font-bold uppercase">Desc.</th>
                       <th className="pb-1 text-right font-bold uppercase">Total</th>
+                      {["pendiente_pago", "pagado"].includes(selectedOrder.status) && (
+                        <th className="pb-1 text-right font-bold uppercase w-8 print:hidden"></th>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-surface-container-high">
-                    {selectedOrder.items.map((item) => (
-                      <tr key={item.id} className="py-1">
-                        <td className="py-1.5 font-medium">{item.product.name}</td>
-                        <td className="py-1.5 text-center text-error">
-                          {Number(item.discountAmount) > 0
-                            ? `-${formatCurrency(item.discountAmount)}`
-                            : "-"}
-                        </td>
-                        <td className="py-1.5 text-right font-bold">
-                          {formatCurrency(item.finalPrice)}
-                        </td>
-                      </tr>
-                    ))}
+                    {selectedOrder.items.map((item) => {
+                      const itemName = item.product?.name || item.name || grammar.capSingular;
+                      const itemBarcode = item.product?.barcode || item.barcode || "";
+                      const isDeleting = deletingItemId === item.id;
+                      const canDelete = ["pendiente_pago", "pagado"].includes(selectedOrder.status);
+
+                      return (
+                        <tr key={item.id} className="py-1">
+                          <td className="py-1.5 font-medium">
+                            {itemName}
+                            {itemBarcode && (
+                              <span className="block text-[10px] text-outline font-mono">
+                                {itemBarcode}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-1.5 text-center text-error">
+                            {Number(item.discountAmount) > 0
+                              ? `-${formatCurrency(item.discountAmount)}`
+                              : "-"}
+                          </td>
+                          <td className="py-1.5 text-right font-bold">
+                            {formatCurrency(item.finalPrice)}
+                          </td>
+                          {canDelete && (
+                            <td className="py-1.5 text-right print:hidden">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteOrderItem(selectedOrder, item)}
+                                disabled={isDeleting}
+                                title={`Eliminar ${grammar.singular} de la orden`}
+                                className="p-1 rounded-md text-outline hover:text-error hover:bg-error-container/30 transition-colors"
+                              >
+                                {isDeleting ? (
+                                  <span className="material-symbols-outlined text-xs animate-spin">
+                                    progress_activity
+                                  </span>
+                                ) : (
+                                  <span className="material-symbols-outlined text-xs">
+                                    delete
+                                  </span>
+                                )}
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

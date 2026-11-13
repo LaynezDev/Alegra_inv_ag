@@ -36,7 +36,7 @@ export async function GET(req: Request) {
     if (!query) {
       const products = await prisma.product.findMany({
         where: { status: "disponible" },
-        take: 30,
+        take: 100,
         orderBy: { createdAt: "desc" },
         include: {
           package: { select: { code: true, packageType: true } },
@@ -47,12 +47,13 @@ export async function GET(req: Request) {
 
     const products = await prisma.product.findMany({
       where: {
+        status: "disponible",
         OR: [
           { barcode: { contains: query } },
           { name: { contains: query } },
         ],
       },
-      take: 20,
+      take: 50,
       include: {
         package: { select: { code: true, packageType: true } },
       },

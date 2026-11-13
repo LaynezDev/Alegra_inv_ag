@@ -384,7 +384,26 @@ export async function searchFirestoreProducts(query?: string, barcode?: string):
     ];
   }
 
-  const snap = await adminDb.collection("products").where("status", "==", "disponible").limit(50).get();
+  // Si hay búsqueda por texto, verificar primero coincidencia exacta de código de barras
+  let exactMatch: any = null;
+  if (query && query.trim()) {
+    const trimmed = query.trim();
+    const barcodeSnap = await adminDb.collection("products").where("barcode", "==", trimmed).limit(1).get();
+    if (!barcodeSnap.empty) {
+      const doc = barcodeSnap.docs[0];
+      const data = doc.data();
+      if (data.status === "disponible") {
+        exactMatch = {
+          ...data,
+          id: doc.id,
+          photos: typeof data.photos === "string" ? data.photos : JSON.stringify(data.photos || []),
+          package: { code: data.packageCode || "PKG", packageType: "lote" },
+        };
+      }
+    }
+  }
+
+  const snap = await adminDb.collection("products").where("status", "==", "disponible").limit(150).get();
   let results: any[] = snap.docs.map((d) => {
     const data = d.data();
     return {
@@ -402,6 +421,10 @@ export async function searchFirestoreProducts(query?: string, barcode?: string):
         (p.name && p.name.toLowerCase().includes(q)) ||
         (p.barcode && p.barcode.toLowerCase().includes(q))
     );
+  }
+
+  if (exactMatch && !results.some((r) => r.id === exactMatch.id)) {
+    results.unshift(exactMatch);
   }
 
   return results;
@@ -589,7 +612,9 @@ export async function getFirestoreOrders(statusFilter?: string): Promise<any[]> 
       totalPaid,
       balanceDue,
       createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
-      items: (data.items || []).map((i: any) => ({
+      items: (data.items || []).map((i: any, idx: number) => ({
+        id: i.id || i.productId || `item_${idx}`,
+        productId: i.productId,
         ...i,
         product: { id: i.productId, barcode: i.barcode, name: i.name, status: data.status === "pagado" ? "vendido" : "apartado" },
       })),
@@ -944,6 +969,84 @@ export async function addFirestoreOrderItem(
     });
 
     return newItem;
+  });
+}
+
+// Eliminar producto de una orden existente y liberar stock a disponible
+export async function removeFirestoreOrderItem(
+  orderId: string,
+  itemIdentifier: { productId?: string | number; barcode?: string; itemId?: string | number }
+): Promise<any> {
+  if (!adminDb) throw new Error("Firestore no configurado");
+
+  const orderRef = adminDb.collection("orders").doc(String(orderId));
+
+  return await adminDb.runTransaction(async (tx) => {
+    const orderDoc = await tx.get(orderRef);
+    if (!orderDoc.exists) throw new Error("Orden no encontrada");
+    const order = orderDoc.data()!;
+
+    if (["enviado", "entregado", "cancelado"].includes(order.status)) {
+      throw new Error(`No se pueden eliminar productos de una orden en estado '${order.status}'`);
+    }
+
+    const currentItems: any[] = order.items || [];
+    const targetProdId = itemIdentifier.productId ? String(itemIdentifier.productId).trim() : "";
+    const targetBarcode = itemIdentifier.barcode ? String(itemIdentifier.barcode).trim() : "";
+    const targetItemId = itemIdentifier.itemId ? String(itemIdentifier.itemId).trim() : "";
+
+    const itemIndex = currentItems.findIndex((it: any) => {
+      if (targetProdId && (String(it.productId) === targetProdId || String(it.id) === targetProdId)) {
+        return true;
+      }
+      if (targetBarcode && String(it.barcode).trim() === targetBarcode) {
+        return true;
+      }
+      if (targetItemId && (String(it.id) === targetItemId || String(it.productId) === targetItemId)) {
+        return true;
+      }
+      return false;
+    });
+
+    if (itemIndex === -1) {
+      throw new Error("El producto que intentas eliminar no se encuentra en esta orden");
+    }
+
+    const removedItem = currentItems[itemIndex];
+    const newItems = currentItems.filter((_, idx) => idx !== itemIndex);
+
+    // Recalcular montos sumando los items restantes
+    const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.originalPrice || 0), 0);
+    const newTotalDiscount = newItems.reduce((acc, it) => acc + Number(it.discountAmount || 0), 0);
+    const newTotalAmount = newItems.reduce((acc, it) => acc + Number(it.finalPrice || 0), 0);
+
+    tx.update(orderRef, {
+      items: newItems,
+      subtotal: newSubtotal,
+      totalDiscount: newTotalDiscount,
+      totalAmount: newTotalAmount,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    // Liberar producto a 'disponible'
+    try {
+      const prodRef = await resolveProductDocRef(removedItem.productId || targetProdId || targetBarcode);
+      tx.update(prodRef, {
+        status: "disponible",
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    } catch (err) {
+      console.warn("No se pudo actualizar estado del producto a disponible al eliminar de orden:", err);
+    }
+
+    return {
+      success: true,
+      removedItem,
+      remainingCount: newItems.length,
+      subtotal: newSubtotal,
+      totalDiscount: newTotalDiscount,
+      totalAmount: newTotalAmount,
+    };
   });
 }
 
