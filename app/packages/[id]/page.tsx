@@ -28,7 +28,7 @@ import {
 import BarcodeDisplay from "@/components/BarcodeDisplay";
 import BarcodePrintModal from "@/components/BarcodePrintModal";
 import CatalogShareModal from "@/components/CatalogShareModal";
-import { formatCurrency, formatWeight, calculateCostByWeight } from "@/lib/utils";
+import { formatCurrency, formatWeight, formatDate, calculateCostByWeight } from "@/lib/utils";
 import { compressImages } from "@/lib/image-compressor";
 
 interface Product {
@@ -124,6 +124,15 @@ export default function PackageDetailPage() {
       const res = await fetch(`/api/packages/${packageId}`);
       if (res.ok) {
         const data = await res.json();
+        // Ordenar siempre por orden de ingreso (fecha más reciente primero)
+        if (data.products && Array.isArray(data.products)) {
+          data.products.sort((a: any, b: any) => {
+            const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            if (timeA !== timeB) return timeB - timeA;
+            return String(b.id).localeCompare(String(a.id));
+          });
+        }
         setPkg(data);
       }
     } catch (e) {
@@ -825,18 +834,32 @@ export default function PackageDetailPage() {
 
       {/* Listado de Productos del Paquete */}
       {(() => {
-        const activeProducts = pkg.products.filter((p) => p.status !== "vendido");
-        const soldProducts = pkg.products.filter((p) => p.status === "vendido");
+        // Ordenar siempre por orden de ingreso (fecha más reciente primero)
+        const sortedProducts = [...pkg.products].sort((a, b) => {
+          const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          if (timeA !== timeB) return timeB - timeA;
+          return String(b.id).localeCompare(String(a.id));
+        });
+
+        const activeProducts = sortedProducts.filter((p) => p.status !== "vendido");
+        const soldProducts = sortedProducts.filter((p) => p.status === "vendido");
         const soldCount = soldProducts.length;
-        const displayedProducts = showSold ? pkg.products : activeProducts;
+        const displayedProducts = showSold ? sortedProducts : activeProducts;
 
         return (
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-              <h2 className="text-base font-bold font-display text-primary flex items-center gap-2">
-                <Tag className="w-4 h-4 text-secondary" />
-                <span>Manifiesto de Prendas ({activeProducts.length} activas)</span>
-              </h2>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h2 className="text-base font-bold font-display text-primary flex items-center gap-2">
+                  <Tag className="w-4 h-4 text-secondary" />
+                  <span>Manifiesto de Prendas ({activeProducts.length} activas)</span>
+                </h2>
+                <span className="px-2 py-0.5 text-[11px] rounded-lg bg-surface-container-high text-on-surface-variant font-medium flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-secondary" />
+                  <span>Más recientes primero</span>
+                </span>
+              </div>
 
               <div className="flex items-center gap-2 self-start sm:self-auto">
                 {pkg.products.length > 0 && (
@@ -982,13 +1005,19 @@ export default function PackageDetailPage() {
                             <h4 className="text-xs sm:text-sm font-bold text-primary truncate" title={prod.name}>
                               {prod.name}
                             </h4>
-                            <div className="flex items-center gap-2 mt-1 text-xs">
+                            <div className="flex items-center gap-2 mt-1 text-xs flex-wrap">
                               <span className="font-bold text-primary font-display">
                                 {formatCurrency(prod.salePrice)}
                               </span>
                               {prod.weight && (
                                 <span className="text-on-surface-variant text-[11px]">
                                   • {formatWeight(prod.weight)}
+                                </span>
+                              )}
+                              {prod.createdAt && (
+                                <span className="text-on-surface-variant text-[10px] flex items-center gap-1 ml-auto">
+                                  <Clock className="w-3 h-3 text-secondary/70 shrink-0" />
+                                  <span>{formatDate(prod.createdAt)}</span>
                                 </span>
                               )}
                             </div>

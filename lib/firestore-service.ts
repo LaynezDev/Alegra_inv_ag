@@ -201,6 +201,14 @@ export async function getFirestorePackageById(id: string): Promise<any | null> {
     };
   });
 
+  // Ordenar productos por orden de ingreso (fecha más reciente primero)
+  products.sort((a: any, b: any) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    if (timeA !== timeB) return timeB - timeA;
+    return String(b.id).localeCompare(String(a.id));
+  });
+
   let totalSold = 0;
   let totalTheoretical = 0;
   products.forEach((p: any) => {
