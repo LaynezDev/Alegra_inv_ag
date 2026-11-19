@@ -26,7 +26,8 @@ export default function Navbar() {
       pathname === "/acceso" ||
       pathname === "/not-found" ||
       pathname.startsWith("/p/") ||
-      pathname.startsWith("/c/")
+      pathname.startsWith("/c/") ||
+      pathname.startsWith("/caja/")
     ) {
       return;
     }
@@ -84,6 +85,7 @@ export default function Navbar() {
     pathname === "/not-found" ||
     pathname.startsWith("/p/") ||
     pathname.startsWith("/c/") ||
+    pathname.startsWith("/caja/") ||
     pathname.startsWith("/catalogo/")
   ) {
     return null;

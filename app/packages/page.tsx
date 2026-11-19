@@ -10,7 +10,9 @@ import {
   ArrowRight, 
   CheckCircle2, 
   Clock, 
-  Layers
+  Layers,
+  Link2,
+  Check
 } from "lucide-react";
 import { formatCurrency, formatWeight, formatDate } from "@/lib/utils";
 
@@ -50,6 +52,14 @@ export default function PackagesPage() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [copiedPkgId, setCopiedPkgId] = useState<string | number | null>(null);
+
+  const handleCopyClientLink = (pkgId: string | number) => {
+    const url = `${window.location.origin}/caja/${pkgId}`;
+    navigator.clipboard.writeText(url);
+    setCopiedPkgId(pkgId);
+    setTimeout(() => setCopiedPkgId(null), 2200);
+  };
 
   const fetchPackages = async () => {
     try {
@@ -444,14 +454,34 @@ export default function PackagesPage() {
                 </div>
               </div>
 
-              {/* Botón de Acceso al Desglose */}
-              <Link
-                href={`/packages/${pkg.id}`}
-                className="w-full py-3 px-4 bg-surface-container-low hover:bg-surface-container border-t border-surface-container-high text-center text-xs font-bold text-primary flex items-center justify-center gap-2 transition-colors"
-              >
-                <span>Desglosar y Administrar Prendas</span>
-                <ArrowRight className="w-3.5 h-3.5 text-secondary group-hover:translate-x-1 transition-transform" />
-              </Link>
+              {/* Botones de Acceso al Desglose y Link Público */}
+              <div className="flex border-t border-surface-container-high divide-x divide-surface-container-high">
+                <Link
+                  href={`/packages/${pkg.id}`}
+                  className="flex-1 py-3 px-3 bg-surface-container-low hover:bg-surface-container text-center text-xs font-bold text-primary flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <span>Desglosar y Administrar</span>
+                  <ArrowRight className="w-3.5 h-3.5 text-secondary group-hover:translate-x-1 transition-transform" />
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => handleCopyClientLink(pkg.id)}
+                  className="py-3 px-3.5 bg-emerald-50/70 hover:bg-emerald-100 text-emerald-800 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                  title="Copiar link público para enviar a clientes"
+                >
+                  {copiedPkgId === pkg.id ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>¡Copiado!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Link2 className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>Link Clientes</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </article>
           ))}
         </div>

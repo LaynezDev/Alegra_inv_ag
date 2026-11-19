@@ -23,7 +23,10 @@ import {
   Trash2,
   Loader2,
   Printer,
-  Share2
+  Share2,
+  Link2,
+  Check,
+  ExternalLink
 } from "lucide-react";
 import BarcodeDisplay from "@/components/BarcodeDisplay";
 import BarcodePrintModal from "@/components/BarcodePrintModal";
@@ -111,6 +114,15 @@ export default function PackageDetailPage() {
 
   // Modal para compartir catálogo público
   const [catalogModalOpen, setCatalogModalOpen] = useState(false);
+  const [copiedPackageLink, setCopiedPackageLink] = useState(false);
+
+  const handleCopyPublicPackageLink = () => {
+    if (!pkg) return;
+    const url = `${window.location.origin}/caja/${pkg.id}`;
+    navigator.clipboard.writeText(url);
+    setCopiedPackageLink(true);
+    setTimeout(() => setCopiedPackageLink(false), 2500);
+  };
 
   // Estado Lightbox / Visualizador de Imágenes en Grande
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -524,6 +536,36 @@ export default function PackageDetailPage() {
 
         {pkg.products.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+            <div className="inline-flex items-center rounded-xl border border-emerald-300 bg-emerald-50 shadow-xs overflow-hidden">
+              <button
+                type="button"
+                onClick={handleCopyPublicPackageLink}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 hover:bg-emerald-100 text-emerald-900 text-xs font-bold transition-all cursor-pointer"
+                title="Copiar enlace público de esta caja para enviar a clientes (solo disponibles, con carrito WhatsApp)"
+              >
+                {copiedPackageLink ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-600" />
+                    <span className="text-emerald-700">¡Link Copiado!</span>
+                  </>
+                ) : (
+                  <>
+                    <Link2 className="w-4 h-4 text-emerald-700" />
+                    <span>Link Clientes</span>
+                  </>
+                )}
+              </button>
+              <Link
+                href={`/caja/${pkg.id}`}
+                target="_blank"
+                rel="noreferrer"
+                className="px-2.5 py-2 border-l border-emerald-200 hover:bg-emerald-100 text-emerald-700 transition-colors flex items-center justify-center"
+                title="Abrir vista pública de clientes en nueva pestaña"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
             <button
               type="button"
               onClick={() => setCatalogModalOpen(true)}

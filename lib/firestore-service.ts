@@ -1423,3 +1423,143 @@ export async function updateStoreSettings(settings: Partial<StoreSettings>): Pro
   await docRef.set(payload, { merge: true });
   return getStoreSettings();
 }
+
+// -----------------------------------------------------------
+// VISTAS PÚBLICAS DE PAQUETE (CAJA) Y AUTOCOMPLETADO CLIENTE
+// -----------------------------------------------------------
+function parsePhotosArray(photos: any): string[] {
+  if (!photos) return [];
+  if (Array.isArray(photos)) return photos.filter((u) => typeof u === "string" && u.trim() !== "");
+  if (typeof photos === "string") {
+    try {
+      const parsed = JSON.parse(photos);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((u) => typeof u === "string" && u.trim() !== "");
+      }
+    } catch {
+      if (photos.trim().startsWith("http") || photos.trim().startsWith("/")) {
+        return [photos.trim()];
+      }
+    }
+  }
+  return [];
+}
+
+/**
+ * Obtiene la vista pública de un paquete/caja por ID o código.
+ * Devuelve únicamente productos en estado 'disponible', ordenados por fecha de ingreso descendente,
+ * exponiendo solo fotos, precio y código del producto.
+ */
+export async function getPublicFirestorePackageById(idOrCode: string): Promise<any | null> {
+  if (!adminDb) return null;
+  const raw = String(idOrCode || "").trim();
+  if (!raw) return null;
+
+  let docSnap = await adminDb.collection("packages").doc(raw).get();
+  if (!docSnap.exists) {
+    const byCodeSnap = await adminDb
+      .collection("packages")
+      .where("code", "==", raw)
+      .limit(1)
+      .get();
+    if (!byCodeSnap.empty) {
+      docSnap = byCodeSnap.docs[0];
+    }
+  }
+
+  if (!docSnap.exists) return null;
+  const data = docSnap.data()!;
+
+  const idCandidates = Array.from(new Set([raw, docSnap.id]));
+  const productsSnap = await adminDb
+    .collection("products")
+    .where("packageId", "in", idCandidates)
+    .get();
+
+  const availableProducts = productsSnap.docs
+    .map((d) => {
+      const pData = d.data();
+      return {
+        id: d.id,
+        barcode: pData.barcode || "",
+        salePrice: Number(pData.salePrice || 0),
+        photos: parsePhotosArray(pData.photos),
+        status: pData.status || "disponible",
+        createdAt: pData.createdAt?.toDate ? pData.createdAt.toDate().toISOString() : pData.createdAt || null,
+      };
+    })
+    .filter((p) => p.status === "disponible");
+
+  // Ordenar por fecha de ingreso descendente (últimos ingresados primero)
+  availableProducts.sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    if (timeA !== timeB) return timeB - timeA;
+    return String(b.id).localeCompare(String(a.id));
+  });
+
+  return {
+    id: docSnap.id,
+    code: data.code || "",
+    name: data.name || data.reference || data.title || null,
+    packageType: data.packageType || "paquete",
+    products: availableProducts.map(({ id, barcode, salePrice, photos }) => ({
+      id,
+      barcode,
+      salePrice,
+      photos,
+    })),
+  };
+}
+
+/**
+ * Busca datos generales públicos de un cliente por su código (ej. CLI-00001)
+ * para autocompletar el formulario antes de enviar pedido por WhatsApp.
+ */
+export async function getPublicFirestoreCustomerByCode(code: string): Promise<any | null> {
+  if (!adminDb) return null;
+  const raw = String(code || "").trim().toUpperCase();
+  if (!raw) return null;
+
+  const candidates = new Set<string>([raw]);
+  const digitsOnly = raw.replace(/^CLI-?/i, "").replace(/\D/g, "");
+  if (digitsOnly) {
+    candidates.add(`CLI-${digitsOnly.padStart(5, "0")}`);
+  }
+
+  let foundDoc: any = null;
+  for (const candidate of Array.from(candidates)) {
+    const snap = await adminDb
+      .collection("customers")
+      .where("barcode", "==", candidate)
+      .limit(1)
+      .get();
+    if (!snap.empty) {
+      foundDoc = snap.docs[0];
+      break;
+    }
+  }
+
+  if (!foundDoc) return null;
+  const data = foundDoc.data();
+
+  const addressParts: string[] = [];
+  if (data.fullAddress) addressParts.push(String(data.fullAddress).trim());
+  if (data.addressReference) addressParts.push(`Ref: ${String(data.addressReference).trim()}`);
+  const locationParts = [data.municipalityName, data.departmentName]
+    .filter(Boolean)
+    .map((s) => String(s).trim());
+  if (locationParts.length > 0) {
+    const locStr = locationParts.join(", ");
+    if (!addressParts.join(" ").toLowerCase().includes(locStr.toLowerCase())) {
+      addressParts.push(locStr);
+    }
+  }
+
+  return {
+    barcode: data.barcode,
+    fullName: data.fullName || "",
+    phonePrimary: data.phonePrimary || "",
+    fullAddress: addressParts.join(" — "),
+  };
+}

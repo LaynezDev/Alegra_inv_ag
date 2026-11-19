@@ -15,10 +15,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // 2. Rutas públicas de catálogo/pedidos compartidos con clientes
+  // 2. Rutas públicas de catálogo/pedidos/paquetes compartidos con clientes
   if (
     pathname.startsWith("/p/") ||
     pathname.startsWith("/c/") ||
+    pathname.startsWith("/caja/") ||
     pathname.startsWith("/catalogo/") ||
     pathname.startsWith("/api/public/")
   ) {
